@@ -1,0 +1,28 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# JetBrains IDEs
+.idea/
+*.sln.iml
+
+# Test and coverage output
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Local configuration and logs
+appsettings.*.local.json
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

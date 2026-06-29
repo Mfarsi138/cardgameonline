@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "OhHell.Web": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51200;http://localhost:51201"
+    }
+  }
+}
