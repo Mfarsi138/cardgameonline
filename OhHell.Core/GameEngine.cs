@@ -8,6 +8,7 @@ public sealed class GameEngine
     private readonly List<TrickPlay> currentTrick = new();
     private readonly List<TrickPlay> lastCompletedTrick = new();
     private readonly List<string> eventLog = new();
+    private readonly HashSet<Card> playedCardsThisRound = new();
     private Suit? leadSuit;
     private int totalBidsThisRound;
 
@@ -172,6 +173,7 @@ public sealed class GameEngine
         }
 
         CurrentPlayer.Hand.Remove(card);
+        playedCardsThisRound.Add(card);
         if (!leadSuit.HasValue)
         {
             leadSuit = card.Suit;
@@ -294,6 +296,7 @@ public sealed class GameEngine
         LastTrickWinnerIndex = null;
         PendingTrickWinnerIndex = null;
         IsTrickResolutionPending = false;
+        playedCardsThisRound.Clear();
 
         AddEvent($"Round {RoundNumber} begins with {CardsPerPlayer} card(s) per player.");
         AddEvent($"Trump card is {TrumpCard.DisplayText}.");
@@ -317,15 +320,57 @@ public sealed class GameEngine
     private int SelectBidForAi(int playerIndex)
     {
         var player = players[playerIndex];
-        var trumpCount = TrumpCard is null ? 0 : player.Hand.Count(card => card.Suit == TrumpCard.Suit);
-        var acesAndKings = player.Hand.Count(card => card.Rank >= 13);
-        var queensAndJacks = player.Hand.Count(card => card.Rank is 11 or 12);
-        var longSuits = player.Hand
-            .GroupBy(card => card.Suit)
-            .Count(group => group.Count() >= 3);
+        var hand = player.Hand;
+        var maxCards = CardsPerPlayer;
 
-        var estimate = trumpCount + acesAndKings + ((queensAndJacks + longSuits) / 2);
-        var bid = Math.Clamp(estimate / 2, 0, CardsPerPlayer);
+        double estimate = 0;
+
+        foreach (var suit in Enum.GetValues<Suit>())
+        {
+            var suitCards = hand.Where(c => c.Suit == suit)
+                .OrderByDescending(c => c.Rank).ToList();
+            var isTrump = TrumpCard is not null && suit == TrumpCard.Suit;
+            var count = suitCards.Count;
+
+            if (count == 0)
+            {
+                if (!isTrump) estimate += 0.45;
+                continue;
+            }
+
+            if (isTrump)
+            {
+                foreach (var card in suitCards)
+                {
+                    if (card.Rank >= 14) estimate += 0.95;
+                    else if (card.Rank >= 13) estimate += 0.85;
+                    else if (card.Rank >= 12) estimate += 0.65;
+                    else if (card.Rank >= 11) estimate += 0.45;
+                    else if (card.Rank >= 10) estimate += 0.25;
+                    else estimate += 0.10;
+                }
+            }
+            else
+            {
+                var highest = suitCards[0].Rank;
+                if (highest >= 14) estimate += 0.9;
+                if (count >= 2 && highest >= 13 && suitCards[1].Rank >= 12)
+                    estimate += 0.55;
+                if (count == 1 && highest < 12)
+                    estimate += 0.2;
+            }
+        }
+
+        var roundFraction = (double)maxCards / MaxCardsPerRound;
+        if (roundFraction < 0.35) estimate = Math.Max(0, estimate - 1.0);
+        else if (roundFraction < 0.5) estimate = Math.Max(0, estimate - 0.5);
+
+        var distance = (playerIndex - CurrentTurnIndex + players.Count) % players.Count;
+        if (distance <= 1) estimate -= 0.3;
+        else if (distance >= players.Count - 2) estimate += 0.3;
+
+        var bid = (int)Math.Round(estimate, MidpointRounding.AwayFromZero);
+        bid = Math.Clamp(bid, 0, maxCards);
         var allowed = GetAllowedBids(playerIndex);
 
         if (!allowed.Contains(bid))
@@ -345,10 +390,12 @@ public sealed class GameEngine
 
         if (isLeading)
         {
-            return SelectLeadCardForAi(legalCards, needsTricks);
+            return SelectLeadCardForAi(playerIndex, legalCards, needsTricks);
         }
 
         var currentBest = DetermineWinningPlay(currentTrick, leadSuit!.Value);
+        var currentWinnerIndex = currentBest.PlayerIndex;
+
         var winningOptions = legalCards
             .Where(card => CompareCards(card, currentBest.Card, leadSuit!.Value) > 0)
             .OrderBy(card => ScoreCardStrength(card, leadSuit))
@@ -357,17 +404,61 @@ public sealed class GameEngine
 
         if (needsTricks)
         {
-            if (winningOptions.Count > 0)
-            {
-                return winningOptions.First();
-            }
+            return SelectCardWhenNeedsTricks(player, legalCards, winningOptions, currentBest, currentWinnerIndex);
+        }
 
+        return SelectCardWhenDumping(player, legalCards, winningOptions, currentBest);
+    }
+
+    private Card SelectCardWhenNeedsTricks(
+        PlayerState player, List<Card> legalCards, List<Card> winningOptions,
+        TrickPlay currentBest, int currentWinnerIndex)
+    {
+        if (winningOptions.Count == 0)
+        {
             return legalCards
                 .OrderBy(card => ScoreCardStrength(card, leadSuit))
                 .ThenBy(card => card.Rank)
                 .First();
         }
 
+        var isSelfWinning = currentWinnerIndex == GetPlayerIndex(player);
+        if (isSelfWinning)
+        {
+            var currentBestCard = currentBest.Card;
+            var guaranteedStronger = winningOptions
+                .Where(c => CompareCards(c, currentBestCard, leadSuit!.Value) > 0)
+                .OrderBy(c => ScoreCardStrength(c, leadSuit))
+                .ThenBy(c => c.Rank)
+                .ToList();
+            if (guaranteedStronger.Count > 0)
+            {
+                return guaranteedStronger.First();
+            }
+        }
+
+        var trumpWins = winningOptions
+            .Where(c => TrumpCard is not null && c.Suit == TrumpCard.Suit)
+            .ToList();
+
+        if (trumpWins.Count > 0 && legalCards.Any(c => TrumpCard is null || c.Suit != TrumpCard.Suit))
+        {
+            var minTrump = trumpWins
+                .OrderBy(c => c.Rank)
+                .First();
+            return minTrump;
+        }
+
+        return winningOptions
+            .OrderBy(c => ScoreCardStrength(c, leadSuit))
+            .ThenBy(c => c.Rank)
+            .First();
+    }
+
+    private Card SelectCardWhenDumping(
+        PlayerState player, List<Card> legalCards, List<Card> winningOptions,
+        TrickPlay currentBest)
+    {
         var safeLosers = legalCards
             .Where(card => CompareCards(card, currentBest.Card, leadSuit!.Value) <= 0)
             .OrderByDescending(card => ScoreCardStrength(card, leadSuit))
@@ -379,30 +470,144 @@ public sealed class GameEngine
             return safeLosers.First();
         }
 
+        if (winningOptions.Count > 0)
+        {
+            var canUnderTrump = winningOptions
+                .Where(c => TrumpCard is not null && c.Suit == TrumpCard.Suit)
+                .OrderBy(c => c.Rank)
+                .ToList();
+            if (canUnderTrump.Count > 0 && canUnderTrump.Count < winningOptions.Count)
+            {
+                return canUnderTrump.First();
+            }
+        }
+
         return winningOptions.Count > 0
             ? winningOptions.First()
             : legalCards.OrderBy(card => ScoreCardStrength(card, leadSuit)).ThenBy(card => card.Rank).First();
     }
 
-    private Card SelectLeadCardForAi(List<Card> legalCards, bool needsTricks)
+    private Card SelectLeadCardForAi(int playerIndex, List<Card> legalCards, bool needsTricks)
     {
-        var nonTrumpCards = TrumpCard is null
-            ? legalCards
-            : legalCards.Where(card => card.Suit != TrumpCard.Suit).ToList();
-        var pool = nonTrumpCards.Count > 0 ? nonTrumpCards : legalCards;
+        if (TrumpCard is null)
+        {
+            return SelectLeadNoTrump(legalCards, needsTricks);
+        }
+
+        var trumpCards = legalCards.Where(c => c.Suit == TrumpCard.Suit).ToList();
+        var nonTrumpCards = legalCards.Where(c => c.Suit != TrumpCard.Suit).ToList();
 
         if (needsTricks)
         {
-            return pool
-                .OrderByDescending(card => LeadStrength(card))
-                .ThenByDescending(card => card.Rank)
+            return SelectLeadWhenNeedsTricks(playerIndex, legalCards, trumpCards, nonTrumpCards);
+        }
+
+        return SelectLeadWhenDumping(playerIndex, legalCards, trumpCards, nonTrumpCards);
+    }
+
+    private Card SelectLeadWhenNeedsTricks(
+        int playerIndex, List<Card> legalCards, List<Card> trumpCards, List<Card> nonTrumpCards)
+    {
+        var suitLengths = GetSuitLengths(legalCards, playerIndex);
+        var player = players[playerIndex];
+
+        var shortSuits = suitLengths
+            .Where(kvp => kvp.Key != TrumpCard!.Suit && kvp.Value == 1 && player.Hand.Any(c => c.Suit == kvp.Key && c.Rank >= 13))
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        if (shortSuits.Count > 0)
+        {
+            var targetSuit = shortSuits.First();
+            var aceCard = player.Hand.First(c => c.Suit == targetSuit && c.Rank >= 13);
+            if (legalCards.Contains(aceCard))
+            {
+                return aceCard;
+            }
+        }
+
+        if (nonTrumpCards.Count > 0)
+        {
+            var suitGroups = nonTrumpCards
+                .GroupBy(c => c.Suit)
+                .OrderBy(g => g.Count())
+                .ThenByDescending(g => g.Max(c => c.Rank));
+
+            foreach (var group in suitGroups)
+            {
+                var topCard = group.OrderByDescending(c => c.Rank).First();
+                if (group.Any(c => c.Rank >= 13) && group.Count() <= 2)
+                {
+                    return topCard;
+                }
+            }
+
+            return nonTrumpCards
+                .OrderByDescending(c => c.Rank)
                 .First();
         }
 
-        return pool
-            .OrderBy(card => LeadStrength(card))
-            .ThenBy(card => card.Rank)
+        return trumpCards
+            .OrderBy(c => c.Rank)
             .First();
+    }
+
+    private Card SelectLeadWhenDumping(
+        int playerIndex, List<Card> legalCards, List<Card> trumpCards, List<Card> nonTrumpCards)
+    {
+        if (nonTrumpCards.Count > 0)
+        {
+            var suitGroups = nonTrumpCards
+                .GroupBy(c => c.Suit)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Max(c => c.Rank));
+
+            foreach (var group in suitGroups)
+            {
+                if (group.Count() >= 3)
+                {
+                    return group.OrderBy(c => c.Rank).First();
+                }
+            }
+
+            return nonTrumpCards
+                .OrderBy(c => c.Rank)
+                .First();
+        }
+
+        return trumpCards
+            .OrderByDescending(c => c.Rank)
+            .First();
+    }
+
+    private Card SelectLeadNoTrump(List<Card> legalCards, bool needsTricks)
+    {
+        if (needsTricks)
+        {
+            return legalCards
+                .OrderByDescending(c => c.Rank)
+                .First();
+        }
+
+        return legalCards
+            .OrderBy(c => c.Rank)
+            .First();
+    }
+
+    private Dictionary<Suit, int> GetSuitLengths(List<Card> legalCards, int playerIndex)
+    {
+        var player = players[playerIndex];
+        return Enum.GetValues<Suit>().ToDictionary(s => s, s => player.Hand.Count(c => c.Suit == s));
+    }
+
+    private int GetPlayerIndex(PlayerState player)
+    {
+        for (var i = 0; i < players.Count; i++)
+        {
+            if (players[i] == player) { return i; }
+        }
+
+        return -1;
     }
 
     private int LeadStrength(Card card)

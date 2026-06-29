@@ -550,8 +550,8 @@ select {
 .card { font-weight: 800; }
 .suit-spades { color: #111827; }
 .suit-hearts { color: #dc2626; }
-.suit-diamonds { color: #d97706; }
-.suit-clubs { color: #15803d; }
+.suit-diamonds { color: #dc2626; }
+.suit-clubs { color: #111827; }
 
 .theme-royal .table-surface,
 .theme-royal .preview-board { background: radial-gradient(circle at center, rgba(59,130,246,0.16), transparent 35%), linear-gradient(180deg, #1d4ed8 0%, #1e3a8a 100%); }
@@ -761,6 +761,21 @@ select {
     margin: 0.75rem 1rem 0;
 }
 
+.game-shell .collapsible-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    background: rgba(5, 10, 20, 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    overflow-y: auto;
+    margin: 0;
+    padding: 1rem;
+}
+
 .panel-title-row {
     display: flex;
     align-items: center;
@@ -787,7 +802,7 @@ select {
 }
 
 .mobile-hand {
-    gap: 0.45rem;
+    gap: 1rem;
     overflow: hidden;
     flex-wrap: nowrap;
     justify-content: center;
@@ -1450,16 +1465,12 @@ button {
 }
 
 .app-frame {
-    width: min(100vw, 500px);
-    height: 100dvh;
-    max-height: 100dvh;
-    margin: 0 auto;
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
     overflow: hidden;
     background: transparent;
-}
-
-.menu-frame {
-    width: min(100vw, 1120px);
 }
 
 .landing-stack {
@@ -1594,10 +1605,12 @@ button {
 }
 
 .game-shell.mobile-shell {
+    display: flex;
+    flex-direction: column;
+    position: relative;
     width: 100%;
-    max-width: min(100vw, 920px);
-    height: 100dvh;
-    min-height: 100dvh;
+    height: 100vh;
+    min-height: 100vh;
     padding: 0;
     overflow: hidden;
 }
@@ -1656,10 +1669,15 @@ button {
     padding: 0.4rem 0.5rem 0;
 }
 
+.table-wrapper {
+    flex: 1;
+    min-height: 0;
+}
+
 .video-style-table,
 .mobile-table {
     width: 100%;
-    height: calc(100dvh - 108px);
+    height: 100%;
     min-height: 0;
     max-height: none;
     margin: 0 auto;
@@ -1742,12 +1760,20 @@ button {
     line-height: 1;
 }
 
+.hand-curve-toggle {
+    font-size: 1.3rem;
+    line-height: 1;
+    padding: 0.1rem 0.45rem;
+    background: rgba(30, 41, 59, 0.75);
+    color: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
 .human-hand,
 .mobile-hand,
 .overlay-hand,
 .stretched-fan-hand {
     overflow: visible;
-    justify-content: space-evenly;
 }
 
 .human-hand {
@@ -1757,28 +1783,25 @@ button {
 }
 
 .overlay-hand {
-    display: grid;
-    grid-template-columns: repeat(var(--hand-count), minmax(0, 1fr));
+    display: flex;
     align-items: flex-end;
     justify-content: center;
     width: 100%;
-    max-width: none;
-    margin-inline: auto;
+    height: 100%;
+    padding: 0.25rem 0.1rem 0.45rem;
     overflow: visible;
-    padding: 0.25rem clamp(1.75rem, 4vw, 3.5rem) 0.45rem;
-    gap: 0;
-    transform: none;
 }
 
 .overlay-hand .hand-card {
-    position: relative;
-    justify-self: center;
-    margin-left: 0;
+    flex-shrink: 0;
+    height: 100%;
+    aspect-ratio: 223 / 324;
+    transform: translateY(var(--fan-lift)) rotate(var(--fan-rotate));
     z-index: calc(100 + var(--card-index));
 }
 
-.overlay-hand .hand-card:first-child {
-    margin-left: 0;
+.overlay-hand .hand-card + .hand-card {
+    margin-left: var(--card-overlap, -68%);
 }
 
 .overlay-hand .hand-card:hover:not(:disabled) {
@@ -1793,19 +1816,8 @@ button {
 
 .stretched-fan-hand {
     width: 100%;
-    max-width: none;
     height: 100%;
     min-height: 112px;
-    justify-content: center;
-    padding: 0.1rem clamp(1.75rem, 4vw, 3.5rem) 0.35rem;
-}
-
-.stretched-fan-hand .hand-card {
-    width: clamp(62px, 5.4vw, 86px);
-    height: auto;
-    aspect-ratio: 223 / 324;
-    transform: translateY(var(--fan-lift)) rotate(var(--fan-rotate));
-    opacity: 1;
 }
 
 .cards-svg .hand-card {
@@ -1825,25 +1837,23 @@ button {
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    gap: 0;
-    width: fit-content;
-    max-width: 100%;
+    width: 100%;
     height: 100%;
-    margin-inline: auto;
-    padding: 0.15rem clamp(0.5rem, 2vw, 1.5rem) 0.45rem;
-    overflow: visible;
+    padding: 0.15rem 0.1rem 0.45rem;
+    gap: 0.5rem;
 }
 
 .straight-hand .hand-card {
-    width: 76px;
-    max-width: none;
+    flex-shrink: 0;
+    width: clamp(50px, calc(100% / var(--hand-count) * 0.9), 85px);
     height: auto;
     aspect-ratio: 223 / 324;
-    margin-left: -34px;
-    transform: none;
-    flex: 0 0 76px;
     z-index: calc(100 + var(--card-index));
     opacity: 1;
+}
+
+.straight-hand .hand-card + .hand-card {
+    margin-left: calc(-1 * clamp(40px, calc(100% / var(--hand-count) * 0.72), 68px));
 }
 
 .straight-hand .hand-card:hover:not(:disabled) {
@@ -1868,8 +1878,24 @@ button {
 }
 
 .compact-center-suit {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1rem;
     font-size: 1.05rem;
     letter-spacing: 0.02em;
+}
+
+.center-rank {
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.center-icon {
+    font-size: 1.05rem;
+    line-height: 1;
 }
 
 .cards-svg .compact-hand-card {
@@ -1896,14 +1922,6 @@ button {
     filter: none;
 }
 
-.stretched-fan-hand .hand-card:first-child,
-.straight-hand .hand-card:first-child {
-    margin-left: 0;
-}
-
-.stretched-fan-hand .hand-card:hover:not(:disabled) {
-    transform: translateY(calc(var(--fan-lift) - 10px)) rotate(var(--fan-rotate)) scale(1.04);
-}
 
 .corner {
     font-size: 0.62rem;
@@ -1996,34 +2014,24 @@ button {
     }
 
     .stretched-fan-hand .hand-card {
-        width: clamp(58px, 10vw, 72px);
+        width: clamp(46px, 12vw, 72px);
         height: auto;
-        margin-left: 0;
     }
 
-    .straight-hand {
-        justify-content: center;
-        gap: 0;
+    .overlay-hand .hand-card {
+        width: clamp(42px, calc(100% / var(--hand-count) * 0.82), 72px);
     }
 
-    .straight-hand .hand-card {
-        width: 64px;
-        max-width: none;
-        height: auto;
-        margin-left: -34px;
-        flex-basis: 64px;
+    .overlay-hand .hand-card + .hand-card {
+        margin-left: calc(-1 * clamp(34px, calc(100% / var(--hand-count) * 0.66), 58px));
+    }
+
+    .straight-hand .hand-card + .hand-card {
+        margin-left: calc(-1 * clamp(34px, calc(100% / var(--hand-count) * 0.7), 58px));
     }
 }
 
 @media (min-width: 901px) {
-    .app-frame {
-        width: min(100vw, 1180px);
-    }
-
-    .menu-frame {
-        width: min(100vw, 1180px);
-    }
-
     .menu-screen {
         padding: 1.25rem;
     }
@@ -2031,10 +2039,6 @@ button {
     .menu-card {
         max-width: 1080px;
         margin: 0 auto;
-    }
-
-    .game-shell.mobile-shell {
-        max-width: 1180px;
     }
 }
 
@@ -2052,18 +2056,9 @@ button {
         overflow: auto;
     }
 
-    .video-style-table,
-    .mobile-table {
-        height: calc(100dvh - 118px);
-    }
 }
 
 @media (max-width: 420px) {
-    .video-style-table,
-    .mobile-table {
-        height: calc(100dvh - 112px);
-        min-height: 0;
-    }
 
     .mobile-seat {
         width: 98px;
@@ -2075,22 +2070,20 @@ button {
     }
 
     .stretched-fan-hand .hand-card {
-        width: clamp(52px, 14vw, 64px);
+        width: clamp(42px, 14vw, 60px);
         height: auto;
-        margin-left: 0;
     }
 
-    .straight-hand {
-        justify-content: center;
-        gap: 0;
+    .overlay-hand .hand-card {
+        width: clamp(38px, calc(100% / var(--hand-count) * 0.8), 60px);
     }
 
-    .straight-hand .hand-card {
-        width: 56px;
-        max-width: none;
-        height: auto;
-        margin-left: -37px;
-        flex-basis: 56px;
+    .overlay-hand .hand-card + .hand-card {
+        margin-left: calc(-1 * clamp(30px, calc(100% / var(--hand-count) * 0.64), 48px));
+    }
+
+    .straight-hand .hand-card + .hand-card {
+        margin-left: calc(-1 * clamp(30px, calc(100% / var(--hand-count) * 0.68), 48px));
     }
 }
 

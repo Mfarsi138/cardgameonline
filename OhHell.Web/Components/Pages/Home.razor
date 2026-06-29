@@ -243,33 +243,45 @@
             return;
         }
 
-        // await JS.InvokeVoidAsync("ohHellToast", message);
+        try
+        {
+            await JS.InvokeVoidAsync("ohHellToast", message);
+        }
+        catch
+        {
+        }
     }
 
     private async void HandleStateChanged()
     {
-        showBidPopup = Session.Engine.Phase == GamePhase.Bidding && Session.IsLocalPlayersTurn();
-        if (showBidPopup)
+        try
         {
-            showMobileMenu = false;
-        }
+            showBidPopup = Session.Engine.Phase == GamePhase.Bidding && Session.IsLocalPlayersTurn();
+            if (showBidPopup)
+            {
+                showMobileMenu = false;
+            }
 
-        if (Session.RecordCompletedMatchIfNeeded())
+            if (Session.RecordCompletedMatchIfNeeded())
+            {
+                await PersistLifetimeScoresAsync();
+            }
+
+            await PersistReconnectStateAsync();
+
+            UpdateShareUrl();
+            if (!string.IsNullOrWhiteSpace(Session.MultiplayerStatusMessage) &&
+                !string.Equals(lastToastMessage, Session.MultiplayerStatusMessage, StringComparison.Ordinal))
+            {
+                lastToastMessage = Session.MultiplayerStatusMessage;
+                await ShowToastAsync(Session.MultiplayerStatusMessage);
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
         {
-            await PersistLifetimeScoresAsync();
         }
-
-        await PersistReconnectStateAsync();
-
-        UpdateShareUrl();
-        if (!string.IsNullOrWhiteSpace(Session.MultiplayerStatusMessage) &&
-            !string.Equals(lastToastMessage, Session.MultiplayerStatusMessage, StringComparison.Ordinal))
-        {
-            lastToastMessage = Session.MultiplayerStatusMessage;
-            await ShowToastAsync(Session.MultiplayerStatusMessage);
-        }
-
-        await InvokeAsync(StateHasChanged);
     }
 
     private async Task CreateRoom() => await Session.CreateOnlineRoomAsync();
@@ -323,7 +335,7 @@
     private void ToggleMobileMenu() => showMobileMenu = !showMobileMenu;
     private void ToggleScoreboard() => showScoreboard = !showScoreboard;
     private void ToggleActivity() => showActivity = !showActivity;
-    private void SetHandCurve(bool curved) => showCurvedHand = curved;
+    private void ToggleHandCurve() => showCurvedHand = !showCurvedHand;
     private string ThemeClass => $"theme-{Session.BoardTheme} cards-{Session.CardTheme}";
     private bool UseSvgCards => string.Equals(Session.CardTheme, "svg", StringComparison.OrdinalIgnoreCase);
     private bool IsRoomLinkJoinMode => openedFromRoomLink && !Session.IsInOnlineRoom && !Session.HasActiveMatch;
@@ -392,16 +404,32 @@
 
     private string HandCardStyle(int index, int total)
     {
-        if (!showCurvedHand || total <= 1)
+        if (total <= 1) return $"--card-index:{index};";
+        if (!showCurvedHand)
         {
-            return $"--card-index:{index}; --fan-rotate:0deg; --fan-lift:0px;";
+            return $"--card-index:{index};";
         }
-
         var center = (total - 1) / 2.0;
         var relative = index - center;
-        var rotate = Math.Clamp(relative * 4.8, -28.0, 28.0);
-        var lift = Math.Min(relative * relative * 1.15, 42.0);
+        var rotate = Math.Clamp(relative * 5.5, -30.0, 30.0);
+        var lift = Math.Min(relative * relative * 1.2, 45.0);
         return $"--card-index:{index}; --fan-rotate:{rotate:F1}deg; --fan-lift:{lift:F1}px;";
+    }
+
+    private string HandContainerStyle(int handCount)
+    {
+        if (handCount <= 1) return "--hand-count:1;";
+
+        var tableWidth = Session.Engine switch
+        {
+            null => 800,
+            var e => Math.Min(1200, Math.Max(360, e.Players.Count * 250))
+        };
+
+        var cardWidth = Math.Clamp(tableWidth / (handCount * 0.95), 55.0, 95.0);
+        var overlap = cardWidth * 0.78;
+
+        return $"--hand-count:{handCount}; --card-overlap:-{overlap:F1}px;";
     }
 
     private string SeatStateClass(int index)
@@ -721,7 +749,7 @@ else
     var opponentEntries = engine.Players.Select((player, index) => new { player, index }).Where(entry => entry.index != bottomIndex).ToList();
     var trickEntries = engine.CurrentTrick.Select((play, index) => new { play, index }).ToList();
 
-    <div class="app-frame desktop-full-app">
+    <div class="app-frame">
         <div class="game-shell mobile-shell @ThemeClass @(Session.IsDealing ? "dealing-mode" : string.Empty) @(showBidPopup ? "bid-open" : string.Empty)">
             <header class="game-topbar refined-topbar">
                 <button class="nav-icon" @onclick="ToggleMobileMenu">☰</button>
@@ -815,7 +843,10 @@ else
                                 else
                                 {
                                     <span class="corner top @entry.play.Card.SuitCssClass">@entry.play.Card.RankText@entry.play.Card.SuitText</span>
-                                    <span class="center-suit @entry.play.Card.SuitCssClass">@entry.play.Card.SuitText</span>
+                                    <span class="center-suit compact-center-suit @entry.play.Card.SuitCssClass">
+                                        <span class="center-rank">@entry.play.Card.RankText</span>
+                                        <span class="center-icon">@entry.play.Card.SuitText</span>
+                                    </span>
                                     <span class="corner bottom @entry.play.Card.SuitCssClass">@entry.play.Card.RankText@entry.play.Card.SuitText</span>
                                 }
                             </div>
@@ -835,13 +866,27 @@ else
                                 <span class="seat-round-line">Won @bottomPlayer.TricksWon · Bid @((bottomPlayer.Bid?.ToString()) ?? "-")</span>
                                 <span class="seat-total-line">@TotalScoreLabel(bottomPlayer) @if (HasTopScore(bottomPlayer)) { <span class="leader-crown" title="Top score">👑</span> }</span>
                             </div>
-                            <div class="hand-style-toggle" role="group" aria-label="Hand style">
-                                <button type="button" class="toggle compact-toggle @(showCurvedHand ? "active" : string.Empty)" @onclick="() => SetHandCurve(true)">Curve</button>
-                                <button type="button" class="toggle compact-toggle @(!showCurvedHand ? "active" : string.Empty)" @onclick="() => SetHandCurve(false)">Straight</button>
-                            </div>
+                            <button type="button" class="compact-toggle hand-curve-toggle" @onclick="ToggleHandCurve" title="@(showCurvedHand ? "Straight layout" : "Curved layout")">
+    @if (showCurvedHand)
+    {
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+            <rect x="2" y="3.5" width="5.6" height="17" rx="1.2"/>
+            <rect x="9.2" y="3.5" width="5.6" height="17" rx="1.2"/>
+            <rect x="16.4" y="3.5" width="5.6" height="17" rx="1.2"/>
+        </svg>
+    }
+    else
+    {
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+            <rect x="4" y="5" width="16" height="19" rx="1.5" transform="rotate(-16, 12, 19)"/>
+            <rect x="4" y="5" width="16" height="19" rx="1.5"/>
+            <rect x="4" y="5" width="16" height="19" rx="1.5" transform="rotate(16, 12, 19)"/>
+        </svg>
+    }
+</button>
                         </div>
                         <div class="human-hand mobile-hand spring-hand @(showCurvedHand ? "overlay-hand stretched-fan-hand curved-hand" : "straight-hand")"
-                             style="--hand-count:@Math.Max(1, bottomPlayer.Hand.Count);">
+                             style="@HandContainerStyle(bottomPlayer.Hand.Count)">
                             @foreach (var handEntry in bottomPlayer.Hand.Select((card, index) => new { card, index }))
                             {
                                 <button class="hand-card real-card hand-spring @(CanPlay(handEntry.card) ? "playable" : "blocked")"
@@ -859,7 +904,10 @@ else
                                     else
                                     {
                                         <span class="corner top @handEntry.card.SuitCssClass">@handEntry.card.RankText@handEntry.card.SuitText</span>
-                                        <span class="center-suit @handEntry.card.SuitCssClass">@handEntry.card.SuitText</span>
+                                        <span class="center-suit compact-center-suit @handEntry.card.SuitCssClass">
+                                            <span class="center-rank">@handEntry.card.RankText</span>
+                                            <span class="center-icon">@handEntry.card.SuitText</span>
+                                        </span>
                                         <span class="corner bottom @handEntry.card.SuitCssClass">@handEntry.card.RankText@handEntry.card.SuitText</span>
                                     }
                                 </button>
