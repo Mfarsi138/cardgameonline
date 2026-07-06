@@ -1,6 +1,6 @@
 @using Microsoft.AspNetCore.Components.Web
-@using OhHell.Web.Components.Layout
-@using OhHell.Web.Components.Pages
+@using OhHell.Components.Components.Layout
+@using OhHell.Components.Components.Pages
 
 <!DOCTYPE html>
 <html lang="en">
@@ -8,12 +8,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <base href="/" />
-    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="_content/OhHell.Components/app.css" />
     <HeadOutlet />
 </head>
 <body>
     <LayoutView Layout="@typeof(MainLayout)">
-        <Home />
+        <Home @rendermode="RenderMode.InteractiveServer" />
     </LayoutView>
     <div id="ohhell-toast" class="toast-shell"></div>
     <script>

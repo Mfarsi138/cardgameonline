@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
-using OhHell.Web.Services;
+using OhHell.Components.Services;
 
 namespace OhHell.Web.Hubs;
 

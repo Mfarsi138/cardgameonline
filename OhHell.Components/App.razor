@@ -1,0 +1,35 @@
+@using Microsoft.AspNetCore.Components.Web
+@using OhHell.Components.Components.Layout
+@using OhHell.Components.Components.Pages
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <base href="/" />
+    <link rel="stylesheet" href="_content/OhHell.Components/app.css" />
+    <HeadOutlet />
+</head>
+<body>
+    <LayoutView Layout="@typeof(MainLayout)">
+        <Home />
+    </LayoutView>
+    <div id="ohhell-toast" class="toast-shell"></div>
+    <script>
+        window.ohHellToast = function (message) {
+            window.dispatchEvent(new CustomEvent('ohhell-toast', { detail: message }));
+        };
+
+        window.addEventListener('ohhell-toast', function (event) {
+            const root = document.getElementById('ohhell-toast');
+            if (!root) return;
+            root.textContent = event.detail || '';
+            root.classList.add('show');
+            clearTimeout(window.__ohhellToastTimer);
+            window.__ohhellToastTimer = setTimeout(() => root.classList.remove('show'), 2200);
+        });
+    </script>
+    @* Blazor framework script is added by each host (Web or MAUI) *@
+</body>
+</html>

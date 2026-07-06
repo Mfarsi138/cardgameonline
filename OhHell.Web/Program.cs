@@ -1,3 +1,4 @@
+using OhHell.Components.Services;
 using OhHell.Web;
 using OhHell.Web.Hubs;
 using OhHell.Web.Services;
@@ -9,6 +10,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSignalR();
 builder.Services.AddScoped<GameSession>();
 builder.Services.AddSingleton<MultiplayerGameService>();
+builder.Services.AddScoped<IPlatformStorage, WebStorage>();
 
 var app = builder.Build();
 
@@ -23,7 +25,8 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    .AddInteractiveServerRenderMode()
+    .AddAdditionalAssemblies(typeof(OhHell.Components.App).Assembly);
 app.MapHub<GameLobbyHub>("/hubs/lobby");
 
 app.Run();

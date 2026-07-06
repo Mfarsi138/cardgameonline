@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -14,6 +14,9 @@
     <Compile Remove="OhHell.Core/**/*.cs" />
     <Compile Remove="OhHell.Web/**/*.cs" />
     <Compile Remove="OhHell.Web/**/*.razor" />
+    <Compile Remove="OhHell.Components/**" />
+    <Compile Remove="OhHell.Maui/**" />
+    <Compile Remove="OhHell.Tests/**" />
     <EmbeddedResource Remove="OhHell.Web/**/*.razor" />
     <Content Remove="OhHell.Web/**" />
     <None Remove="OhHell.Web/**" />
