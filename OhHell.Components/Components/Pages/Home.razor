@@ -884,6 +884,17 @@ else
     }
 </button>
                         </div>
+                        @if (Session.IsTurnTimerActive)
+                        {
+                            <div class="turn-timer-container">
+                                <div class="turn-timer-bar">
+                                    <div class="turn-timer-fill @(Session.TurnTimeRemainingMs <= 5000 ? "timer-critical" : Session.TurnTimeRemainingMs <= 10000 ? "timer-warning" : "timer-normal")"
+                                         style="width: @(Session.TurnTimeRemainingMs * 100 / 15000)%">
+                                    </div>
+                                </div>
+                                <span class="turn-timer-text">@(Session.TurnTimeRemainingMs / 1000)s</span>
+                            </div>
+                        }
                         <div class="human-hand mobile-hand spring-hand @(showCurvedHand ? "overlay-hand stretched-fan-hand curved-hand" : "straight-hand")"
                              style="@HandContainerStyle(bottomPlayer.Hand.Count)">
                             @foreach (var handEntry in bottomPlayer.Hand.Select((card, index) => new { card, index }))

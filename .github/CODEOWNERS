@@ -1,0 +1,17 @@
+# Code owners for the Oh Hell Card Game project
+# These owners will be automatically requested for review
+
+# Default owner for everything
+* @Mfarsi138
+
+# Game engine
+OhHell.Core/ @Mfarsi138
+
+# Shared UI and services
+OhHell.Components/ @Mfarsi138
+
+# Web app
+OhHell.Web/ @Mfarsi138
+
+# Android app
+OhHell.Maui/ @Mfarsi138

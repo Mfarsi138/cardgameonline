@@ -2177,3 +2177,53 @@ button {
     from { transform: translate(0, 0) scale(1); opacity: 1; }
     to { transform: translate(0, 0) scale(0.42); opacity: 0; }
 }
+
+/* Turn Timer */
+.turn-timer-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    margin-bottom: 4px;
+}
+
+.turn-timer-bar {
+    flex: 1;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.turn-timer-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s linear, background-color 0.3s ease;
+}
+
+.turn-timer-fill.timer-normal {
+    background: #22c55e;
+}
+
+.turn-timer-fill.timer-warning {
+    background: #f59e0b;
+}
+
+.turn-timer-fill.timer-critical {
+    background: #ef4444;
+    animation: timerPulse 0.5s ease-in-out infinite;
+}
+
+.turn-timer-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+    min-width: 24px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+@keyframes timerPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}

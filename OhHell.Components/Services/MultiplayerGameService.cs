@@ -10,8 +10,11 @@ public sealed class MultiplayerGameService
     private const int PlayDelayMs = 500;
     private const int RevealWinnerDelayMs = 2200;
     private const int AfterResolveDelayMs = 180;
+    private const int TurnTimeoutMs = 15_000;
 
     private readonly ConcurrentDictionary<string, OnlineGameRoom> rooms = new();
+    private readonly ConcurrentDictionary<string, System.Threading.Timer> turnTimers = new();
+    private readonly ConcurrentDictionary<string, bool> turnTimerFired = new();
 
     public event Action<string>? RoomUpdated;
 
@@ -185,6 +188,7 @@ public sealed class MultiplayerGameService
 
     public async Task<bool> PlaceBidAsync(string roomCode, string sessionId, int bid)
     {
+        CancelTurnTimer(roomCode);
         var room = GetRoom(roomCode);
         if (room?.Engine is null)
         {
@@ -214,6 +218,7 @@ public sealed class MultiplayerGameService
 
     public async Task<bool> PlayCardAsync(string roomCode, string sessionId, Card card)
     {
+        CancelTurnTimer(roomCode);
         var room = GetRoom(roomCode);
         if (room?.Engine is null)
         {
@@ -271,6 +276,7 @@ public sealed class MultiplayerGameService
 
     public async Task LeaveRoomAsync(string roomCode, string sessionId)
     {
+        CancelTurnTimer(roomCode);
         var room = GetRoom(roomCode);
         if (room is null)
         {
@@ -288,6 +294,7 @@ public sealed class MultiplayerGameService
 
             if (room.Members.Count == 0)
             {
+                CancelTurnTimer(roomCode);
                 rooms.TryRemove(room.RoomCode, out _);
                 return;
             }
@@ -308,6 +315,73 @@ public sealed class MultiplayerGameService
         }
 
         Notify(room.RoomCode);
+    }
+
+    private void StartTurnTimer(string roomCode)
+    {
+        CancelTurnTimer(roomCode);
+        turnTimerFired[roomCode] = false;
+
+        var timer = new System.Threading.Timer(async _ =>
+        {
+            turnTimerFired[roomCode] = true;
+            CancelTurnTimer(roomCode);
+            await AutoPlayOnTimeoutAsync(roomCode);
+        }, null, TurnTimeoutMs, Timeout.Infinite);
+
+        turnTimers[roomCode] = timer;
+        Notify(roomCode);
+    }
+
+    private void CancelTurnTimer(string roomCode)
+    {
+        if (turnTimers.TryRemove(roomCode, out var timer))
+        {
+            timer.Dispose();
+        }
+        turnTimerFired.TryRemove(roomCode, out _);
+        Notify(roomCode);
+    }
+
+    private async Task AutoPlayOnTimeoutAsync(string roomCode)
+    {
+        var room = GetRoom(roomCode);
+        if (room?.Engine is null)
+        {
+            return;
+        }
+
+        await room.SyncLock.WaitAsync();
+        try
+        {
+            if (!room.Engine.CurrentPlayer.IsHuman)
+            {
+                return;
+            }
+
+            if (room.Engine.Phase == GamePhase.Bidding)
+            {
+                var allowed = room.Engine.GetAllowedBids(room.Engine.CurrentTurnIndex);
+                var bid = allowed.Count > 0 ? allowed[0] : 0;
+                room.Engine.PlaceBid(bid);
+            }
+            else if (room.Engine.Phase == GamePhase.TrickPlaying)
+            {
+                var legal = room.Engine.GetLegalCards(room.Engine.CurrentTurnIndex);
+                if (legal.Count > 0)
+                {
+                    var card = legal.OrderBy(c => c.Rank).First();
+                    room.Engine.PlayCard(card);
+                }
+            }
+        }
+        finally
+        {
+            room.SyncLock.Release();
+        }
+
+        Notify(room.RoomCode);
+        await RunAutomaticFlowAsync(room.RoomCode);
     }
 
     private async Task RunAutomaticFlowAsync(string roomCode)
@@ -355,6 +429,11 @@ public sealed class MultiplayerGameService
         finally
         {
             room.SyncLock.Release();
+        }
+
+        if (room.Engine?.CurrentPlayer.IsHuman == true && room.Engine.Phase is GamePhase.Bidding or GamePhase.TrickPlaying && !room.Engine.IsTrickResolutionPending)
+        {
+            StartTurnTimer(roomCode);
         }
 
         Notify(room.RoomCode);

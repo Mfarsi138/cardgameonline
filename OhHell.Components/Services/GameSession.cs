@@ -8,12 +8,15 @@ public sealed class GameSession(MultiplayerGameService multiplayerGameService) :
     private const int DealStepDelayMs = 70;
     private const int RevealWinnerDelayMs = 2200;
     private const int AfterResolveDelayMs = 180;
+    private const int TurnTimeoutMs = 15_000;
 
     private readonly string sessionId = Guid.NewGuid().ToString("N");
     private GameEngine localEngine = GameEngine.CreateDefault();
     private int lastSeenRoundNumber;
     private int lastSeenCardsPerPlayer;
     private bool lifetimeScoresAppliedForMatch;
+    private System.Threading.Timer? turnTimer;
+    private bool turnTimerFired;
 
     public event Action? StateChanged;
 
@@ -46,6 +49,8 @@ public sealed class GameSession(MultiplayerGameService multiplayerGameService) :
     public int? LocalPlayerIndex => CurrentRoom?.Members.FirstOrDefault(member => member.SessionId == sessionId)?.PlayerIndex ?? (CurrentRoom is null ? 0 : null);
     public string MultiplayerStatusMessage { get; set; } = string.Empty;
     public Dictionary<string, int> LifetimeScores { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+    public int TurnTimeRemainingMs { get; private set; }
+    public bool IsTurnTimerActive => turnTimer is not null;
 
     public Task EnsureStartedAsync()
     {
@@ -240,6 +245,7 @@ public sealed class GameSession(MultiplayerGameService multiplayerGameService) :
 
     public void ReturnToMenu()
     {
+        CancelTurnTimer();
         if (GameMode == "online")
         {
             _ = LeaveOnlineRoomAsync();
@@ -260,6 +266,7 @@ public sealed class GameSession(MultiplayerGameService multiplayerGameService) :
 
     public async Task PlaceBidAsync(int bid)
     {
+        CancelTurnTimer();
         if (IsBusy)
         {
             return;
@@ -282,6 +289,7 @@ public sealed class GameSession(MultiplayerGameService multiplayerGameService) :
 
     public async Task PlayCardAsync(Card card)
     {
+        CancelTurnTimer();
         if (IsBusy)
         {
             return;
@@ -351,6 +359,65 @@ public sealed class GameSession(MultiplayerGameService multiplayerGameService) :
         NotifyStateChanged();
     }
 
+    private void StartTurnTimer()
+    {
+        CancelTurnTimer();
+        turnTimerFired = false;
+        TurnTimeRemainingMs = TurnTimeoutMs;
+
+        turnTimer = new System.Threading.Timer(async _ =>
+        {
+            turnTimerFired = true;
+            CancelTurnTimer();
+            await AutoPlayOnTimeout();
+        }, null, TurnTimeoutMs, Timeout.Infinite);
+
+        _ = RunTimerTickAsync();
+        NotifyStateChanged();
+    }
+
+    private async Task RunTimerTickAsync()
+    {
+        while (TurnTimeRemainingMs > 0 && !turnTimerFired)
+        {
+            await Task.Delay(1000);
+            TurnTimeRemainingMs -= 1000;
+            NotifyStateChanged();
+        }
+    }
+
+    private void CancelTurnTimer()
+    {
+        turnTimer?.Dispose();
+        turnTimer = null;
+        TurnTimeRemainingMs = 0;
+        NotifyStateChanged();
+    }
+
+    private async Task AutoPlayOnTimeout()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        if (localEngine.Phase == GamePhase.Bidding && localEngine.CurrentPlayer.IsHuman)
+        {
+            var allowed = localEngine.GetAllowedBids(localEngine.CurrentTurnIndex);
+            var bid = allowed.Count > 0 ? allowed[0] : 0;
+            await PlaceBidAsync(bid);
+        }
+        else if (localEngine.Phase == GamePhase.TrickPlaying && localEngine.CurrentPlayer.IsHuman)
+        {
+            var legal = localEngine.GetLegalCards(localEngine.CurrentTurnIndex);
+            if (legal.Count > 0)
+            {
+                var card = legal.OrderBy(c => c.Rank).First();
+                await PlayCardAsync(card);
+            }
+        }
+    }
+
     private async Task RunLocalAiUntilHumanAsync()
     {
         if (IsBusy)
@@ -378,6 +445,11 @@ public sealed class GameSession(MultiplayerGameService multiplayerGameService) :
         {
             IsBusy = false;
             NotifyStateChanged();
+        }
+
+        if (localEngine.CurrentPlayer.IsHuman && localEngine.Phase is GamePhase.Bidding or GamePhase.TrickPlaying && !localEngine.IsTrickResolutionPending)
+        {
+            StartTurnTimer();
         }
     }
 
@@ -477,6 +549,7 @@ public sealed class GameSession(MultiplayerGameService multiplayerGameService) :
 
     public void Dispose()
     {
+        CancelTurnTimer();
         multiplayerGameService.RoomUpdated -= HandleRoomUpdated;
     }
 }

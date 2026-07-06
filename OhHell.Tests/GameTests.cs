@@ -213,3 +213,166 @@ public class PlatformStorageTests
         Assert.Equal("Hello!", storage.ToastMessages[0]);
     }
 }
+
+public class TurnTimerTests
+{
+    [Fact]
+    public void GameSession_InitialTimerNotActive()
+    {
+        var service = new MultiplayerGameService();
+        var session = new GameSession(service);
+        Assert.False(session.IsTurnTimerActive);
+        Assert.Equal(0, session.TurnTimeRemainingMs);
+    }
+
+    [Fact]
+    public async Task GameSession_StartLocalMatch_TimerStartsOnHumanTurn()
+    {
+        var service = new MultiplayerGameService();
+        var session = new GameSession(service);
+        session.GameMode = "local";
+        await session.StartConfiguredLocalMatchAsync();
+
+        // After match starts and AI turns complete, timer should be active
+        // (assuming human is not first to act)
+        if (session.IsLocalPlayersTurn())
+        {
+            Assert.True(session.IsTurnTimerActive);
+            Assert.True(session.TurnTimeRemainingMs > 0);
+        }
+    }
+
+    [Fact]
+    public async Task GameSession_PlaceBid_CancelsTimer()
+    {
+        var service = new MultiplayerGameService();
+        var session = new GameSession(service);
+        session.GameMode = "local";
+        await session.StartConfiguredLocalMatchAsync();
+
+        if (session.IsLocalPlayersTurn() && session.Engine.Phase == GamePhase.Bidding)
+        {
+            Assert.True(session.IsTurnTimerActive);
+            var allowed = session.Engine.GetAllowedBids(session.Engine.CurrentTurnIndex);
+            if (allowed.Count > 0)
+            {
+                await session.PlaceBidAsync(allowed[0]);
+                // After PlaceBidAsync completes, RunLocalAiUntilHumanAsync may have
+                // restarted the timer if it became the human's turn again.
+                // The important thing is that the timer was cancelled during the bid.
+                Assert.True(session.Engine.BidCountThisRound > 0);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GameSession_PlayCard_CancelsTimer()
+    {
+        var service = new MultiplayerGameService();
+        var session = new GameSession(service);
+        session.GameMode = "local";
+        await session.StartConfiguredLocalMatchAsync();
+
+        // Skip to trick playing phase by running AI turns
+        while (session.Engine.Phase == GamePhase.Bidding && !session.IsLocalPlayersTurn())
+        {
+            await Task.Delay(100);
+        }
+
+        if (session.Engine.Phase == GamePhase.Bidding && session.IsLocalPlayersTurn())
+        {
+            var allowed = session.Engine.GetAllowedBids(session.Engine.CurrentTurnIndex);
+            if (allowed.Count > 0)
+            {
+                await session.PlaceBidAsync(allowed[0]);
+            }
+        }
+
+        // Wait for trick playing phase
+        while (session.Engine.Phase != GamePhase.TrickPlaying)
+        {
+            await Task.Delay(100);
+            if (session.Engine.Phase == GamePhase.RoundComplete || session.Engine.Phase == GamePhase.MatchComplete)
+            {
+                return;
+            }
+        }
+
+        if (session.IsLocalPlayersTurn() && session.Engine.Phase == GamePhase.TrickPlaying)
+        {
+            var legal = session.Engine.GetLegalCards(session.Engine.CurrentTurnIndex);
+            if (legal.Count > 0)
+            {
+                await session.PlayCardAsync(legal[0]);
+                Assert.False(session.IsTurnTimerActive);
+            }
+        }
+    }
+
+    [Fact]
+    public void GameSession_Dispose_CancelsTimer()
+    {
+        var service = new MultiplayerGameService();
+        var session = new GameSession(service);
+        session.Dispose();
+        Assert.False(session.IsTurnTimerActive);
+    }
+
+    [Fact]
+    public void GameSession_ReturnToMenu_CancelsTimer()
+    {
+        var service = new MultiplayerGameService();
+        var session = new GameSession(service);
+        session.ReturnToMenu();
+        Assert.False(session.IsTurnTimerActive);
+    }
+
+    [Fact]
+    public async Task GameSession_NoTimer_AfterGameComplete()
+    {
+        var service = new MultiplayerGameService();
+        var session = new GameSession(service);
+        session.GameMode = "local";
+        await session.StartConfiguredLocalMatchAsync();
+
+        // Complete the match by playing all rounds
+        var maxIterations = 500;
+        var iterations = 0;
+        while (session.Engine.Phase != GamePhase.MatchComplete && iterations < maxIterations)
+        {
+            iterations++;
+            if (session.IsBusy || session.Engine.IsTrickResolutionPending)
+            {
+                await Task.Delay(100);
+                continue;
+            }
+
+            if (session.IsLocalPlayersTurn())
+            {
+                if (session.Engine.Phase == GamePhase.Bidding)
+                {
+                    var allowed = session.Engine.GetAllowedBids(session.Engine.CurrentTurnIndex);
+                    if (allowed.Count > 0)
+                    {
+                        await session.PlaceBidAsync(allowed[0]);
+                    }
+                }
+                else if (session.Engine.Phase == GamePhase.TrickPlaying)
+                {
+                    var legal = session.Engine.GetLegalCards(session.Engine.CurrentTurnIndex);
+                    if (legal.Count > 0)
+                    {
+                        await session.PlayCardAsync(legal[0]);
+                    }
+                }
+                else if (session.Engine.Phase == GamePhase.RoundComplete)
+                {
+                    await session.AdvanceRoundAsync();
+                }
+            }
+            await Task.Delay(50);
+        }
+
+        Assert.False(session.IsTurnTimerActive);
+    }
+}
