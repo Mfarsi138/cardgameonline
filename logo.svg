@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0b6f3c"/>
+      <stop offset="100%" style="stop-color:#08592f"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#d97706"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="200" cy="200" r="190" fill="url(#bg)" stroke="#3f2a17" stroke-width="12"/>
+
+  <!-- Table felt texture -->
+  <circle cx="200" cy="200" r="170" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+
+  <!-- Left card (spade) -->
+  <g transform="translate(110, 100) rotate(-15)" filter="url(#shadow)">
+    <rect x="0" y="0" width="80" height="115" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+    <text x="10" y="22" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#111827">A</text>
+    <text x="10" y="38" font-family="Arial, sans-serif" font-size="14" fill="#111827">&#9824;</text>
+    <text x="40" y="72" font-family="Arial, sans-serif" font-size="32" fill="#111827" text-anchor="middle">&#9824;</text>
+  </g>
+
+  <!-- Right card (heart) -->
+  <g transform="translate(210, 100) rotate(15)" filter="url(#shadow)">
+    <rect x="0" y="0" width="80" height="115" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+    <text x="10" y="22" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#dc2626">K</text>
+    <text x="10" y="38" font-family="Arial, sans-serif" font-size="14" fill="#dc2626">&#9829;</text>
+    <text x="40" y="72" font-family="Arial, sans-serif" font-size="32" fill="#dc2626" text-anchor="middle">&#9829;</text>
+  </g>
+
+  <!-- Title -->
+  <text x="200" y="270" font-family="Georgia, serif" font-size="48" font-weight="bold" fill="url(#gold)" text-anchor="middle" filter="url(#shadow)">OH HELL</text>
+
+  <!-- Subtitle -->
+  <text x="200" y="300" font-family="Arial, sans-serif" font-size="16" fill="rgba(255,255,255,0.7)" text-anchor="middle" letter-spacing="4">CARD GAME</text>
+
+  <!-- Decorative dots -->
+  <circle cx="140" cy="320" r="3" fill="rgba(245,158,11,0.5)"/>
+  <circle cx="200" cy="320" r="3" fill="rgba(245,158,11,0.5)"/>
+  <circle cx="260" cy="320" r="3" fill="rgba(245,158,11,0.5)"/>
+
+  <!-- Suit symbols at bottom -->
+  <text x="155" y="355" font-family="Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.4)" text-anchor="middle">&#9824; &#9829; &#9830; &#9827;</text>
+</svg>
