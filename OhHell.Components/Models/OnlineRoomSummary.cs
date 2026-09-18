@@ -7,6 +7,7 @@ public sealed class OnlineRoomSummary
     public int PlayerCount { get; init; }
     public int MaxPlayers { get; init; }
     public bool Started { get; init; }
+    public bool IsPublic { get; init; } = true;
     public string BoardTheme { get; init; } = "emerald";
     public string CardTheme { get; init; } = "svg";
     public bool CanJoin { get; init; }

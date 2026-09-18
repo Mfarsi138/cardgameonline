@@ -11,6 +11,9 @@ public sealed class OnlineGameRoom
     public string BoardTheme { get; set; } = "emerald";
     public string CardTheme { get; set; } = "svg";
     public bool Started { get; set; }
+    public bool IsPublic { get; set; } = true;
+    public string BotDifficulty { get; set; } = "hard";
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public List<OnlineRoomMember> Members { get; } = new();
     public GameEngine? Engine { get; set; }
     public SemaphoreSlim SyncLock { get; } = new(1, 1);

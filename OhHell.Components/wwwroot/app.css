@@ -27,6 +27,7 @@ button {
     border-radius: 14px;
     padding: 0.75rem 1rem;
     font-size: 1rem;
+    min-height: 44px;
     cursor: pointer;
     transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
 }
@@ -155,6 +156,21 @@ select {
     display: block;
     margin-bottom: 0.4rem;
     color: #cbd5e1;
+    padding: 0.5rem 0.75rem;
+    border-radius: 10px;
+    font-size: 0.85rem;
+}
+
+.multiplayer-status.status-error {
+    background: rgba(220, 38, 38, 0.15);
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    color: #fca5a5;
+}
+
+.multiplayer-status.status-info {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
 }
 
 .start-button {
@@ -797,7 +813,7 @@ select {
 }
 
 .mobile-table {
-    min-height: 680px;
+    min-height: min(680px, calc(100dvh - 120px));
     border-width: 8px;
 }
 
@@ -919,7 +935,7 @@ select {
 }
 
 .video-style-table {
-    min-height: 720px;
+    min-height: min(720px, calc(100dvh - 120px));
 }
 
 .count-seat {
@@ -1011,7 +1027,7 @@ select {
     }
 
     .mobile-table {
-        min-height: 700px;
+        min-height: min(700px, calc(100dvh - 100px));
         border-width: 7px;
         border-radius: 28px;
     }
@@ -1398,6 +1414,138 @@ select {
     width: min(720px, calc(100vw - 1rem));
 }
 
+.exit-confirm-card {
+    width: min(380px, calc(100vw - 2rem));
+    text-align: center;
+}
+
+.exit-confirm-card h3 {
+    margin-bottom: 0.5rem;
+}
+
+.exit-confirm-text {
+    color: rgba(248, 250, 252, 0.7);
+    font-size: 0.9rem;
+    margin-bottom: 1.25rem;
+    line-height: 1.5;
+}
+
+.exit-confirm-leave {
+    background: rgba(220, 38, 38, 0.85);
+    color: #fff;
+}
+
+.exit-confirm-leave:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 1);
+}
+
+.round-popup-card .popup-score-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.round-popup-card .popup-score-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.6rem 0.75rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.round-popup-card .popup-player-name {
+    font-weight: 700;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.round-popup-card .popup-detail {
+    font-size: 0.82rem;
+    color: rgba(248, 250, 252, 0.55);
+    white-space: nowrap;
+}
+
+.round-popup-card .popup-delta {
+    font-weight: 800;
+    font-size: 1rem;
+    min-width: 40px;
+    text-align: right;
+}
+
+.bid-success .popup-delta { color: #34d399; }
+.bid-fail .popup-delta { color: #f87171; }
+
+.round-popup-card .popup-total {
+    font-size: 0.82rem;
+    color: rgba(248, 250, 252, 0.7);
+    min-width: 70px;
+    text-align: right;
+}
+
+/* Match Complete popup */
+.match-popup-card .match-winner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 0.75rem 0 0.25rem;
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #fbbf24;
+}
+
+.match-popup-card .match-winner.human-winner {
+    color: #34d399;
+}
+
+.match-popup-card .winner-crown {
+    font-size: 1.5rem;
+}
+
+.match-popup-card .popup-score-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin: 1rem 0;
+}
+
+.match-popup-card .popup-score-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.6rem 0.75rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.match-popup-card .popup-rank {
+    font-weight: 700;
+    color: rgba(248, 250, 252, 0.45);
+    min-width: 28px;
+}
+
+.match-popup-card .popup-player-name {
+    font-weight: 700;
+    text-align: left;
+}
+
+.match-popup-card .popup-total {
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.bid-success .popup-player-name,
+.bid-success .popup-total {
+    color: #fbbf24;
+}
+
 @keyframes playedCardResolve {
     0%, 45% {
         left: var(--hold-x);
@@ -1446,14 +1594,13 @@ select {
 
 html,
 body {
-    height: 100%;
-    overflow: hidden;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 body {
-    display: contents;
-    align-items: center;
-    justify-content: center;
+    display: block;
 }
 
 .menu-card,
@@ -1476,10 +1623,17 @@ button {
 .app-frame {
     width: 100%;
     max-width: 100%;
-    height: 100vh;
-    max-height: 100vh;
-    overflow: hidden;
+    min-height: 100dvh;
+    height: auto;
+    max-height: none;
+    overflow: visible;
     background: transparent;
+}
+
+.app-frame:has(.game-shell.mobile-shell) {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
 }
 
 .landing-stack {
@@ -1618,15 +1772,15 @@ button {
     flex-direction: column;
     position: relative;
     width: 100%;
-    height: 100vh;
-    min-height: 100vh;
+    height: 100dvh;
+    min-height: 100dvh;
     padding: 0;
     overflow: hidden;
 }
 
 .menu-card {
-    max-height: calc(100dvh - 1.5rem);
-    overflow: auto;
+    max-height: none;
+    overflow: visible;
 }
 
 .mobile-menu-card,
@@ -1716,6 +1870,7 @@ button {
     height: 31%;
     min-height: 220px;
     padding: 0.45rem 0 0.2rem;
+    padding-bottom: max(0.2rem, env(safe-area-inset-bottom, 0px));
     background: rgba(8, 15, 24, 0.84);
     transform: none;
     display: flex;
@@ -2076,8 +2231,13 @@ button {
     }
 
     .bottom-hand-zone {
-        height: 30%;
-        min-height: 176px;
+        height: 28%;
+        min-height: 160px;
+        padding-bottom: max(0.15rem, env(safe-area-inset-bottom, 0px));
+    }
+
+    .mobile-table {
+        min-height: min(600px, calc(100dvh - 100px));
     }
 
     .stretched-fan-hand .hand-card {
@@ -2226,4 +2386,25 @@ button {
 @keyframes timerPulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.6; }
+}
+
+/* Accessibility: focus-visible */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+    outline: 3px solid #72edff;
+    outline-offset: 2px;
+}
+
+/* Accessibility: reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    .seat-reaction { animation: none !important; }
+    .turn-timer-bar::after { animation: none !important; }
 }

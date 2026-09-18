@@ -5,6 +5,16 @@ using Xunit;
 
 namespace OhHell.Tests;
 
+internal sealed class StubStorage : IPlatformStorage
+{
+    private readonly Dictionary<string, string> store = new();
+    public Task<string?> GetItemAsync(string key) => Task.FromResult(store.TryGetValue(key, out var v) ? v : null);
+    public Task SetItemAsync(string key, string value) { store[key] = value; return Task.CompletedTask; }
+    public Task RemoveItemAsync(string key) { store.Remove(key); return Task.CompletedTask; }
+    public Task CopyToClipboardAsync(string text) => Task.CompletedTask;
+    public Task ShowToastAsync(string message) => Task.CompletedTask;
+}
+
 public class GameEngineTests
 {
     [Fact]
@@ -73,16 +83,16 @@ public class MultiplayerGameServiceTests
     {
         var service = new MultiplayerGameService();
         var created = service.CreateRoom("session1", "player1", "Host", 4, "emerald", "svg", "hard");
-        var joined = service.JoinRoom(created.RoomCode, "session2", "player2", "Guest");
+        var (joined, joinResult) = service.JoinRoom(created.RoomCode, "session2", "player2", "Guest");
         Assert.NotNull(joined);
-        Assert.Equal(2, joined!.Members.Count);
+        Assert.Equal(2, joined.Members.Count);
     }
 
     [Fact]
     public void JoinRoom_InvalidCode_ReturnsNull()
     {
         var service = new MultiplayerGameService();
-        var result = service.JoinRoom("XXXXXX", "session1", "player1", "Guest");
+        var (result, joinResult) = service.JoinRoom("XXXXXX", "session1", "player1", "Guest");
         Assert.Null(result);
     }
 
@@ -103,7 +113,7 @@ public class GameSessionTests
     public void GameSession_CanCreate()
     {
         var service = new MultiplayerGameService();
-        var session = new GameSession(service);
+        var session = new GameSession(service, new StubStorage());
         Assert.NotNull(session);
         Assert.False(session.HasActiveMatch);
     }
@@ -112,7 +122,7 @@ public class GameSessionTests
     public void GameSession_DefaultValues()
     {
         var service = new MultiplayerGameService();
-        var session = new GameSession(service);
+        var session = new GameSession(service, new StubStorage());
         Assert.Equal("You", session.LocalPlayerName);
         Assert.Equal(4, session.SelectedPlayerCount);
         Assert.Equal("svg", session.CardTheme);
@@ -123,7 +133,7 @@ public class GameSessionTests
     public async Task GameSession_StartLocalMatch_CreatesEngine()
     {
         var service = new MultiplayerGameService();
-        var session = new GameSession(service);
+        var session = new GameSession(service, new StubStorage());
         await session.StartConfiguredLocalMatchAsync();
         Assert.NotNull(session.Engine);
         Assert.True(session.HasActiveMatch);
@@ -220,7 +230,7 @@ public class TurnTimerTests
     public void GameSession_InitialTimerNotActive()
     {
         var service = new MultiplayerGameService();
-        var session = new GameSession(service);
+        var session = new GameSession(service, new StubStorage());
         Assert.False(session.IsTurnTimerActive);
         Assert.Equal(0, session.TurnTimeRemainingMs);
     }
@@ -229,7 +239,7 @@ public class TurnTimerTests
     public async Task GameSession_StartLocalMatch_TimerStartsOnHumanTurn()
     {
         var service = new MultiplayerGameService();
-        var session = new GameSession(service);
+        var session = new GameSession(service, new StubStorage());
         session.GameMode = "local";
         await session.StartConfiguredLocalMatchAsync();
 
@@ -246,7 +256,7 @@ public class TurnTimerTests
     public async Task GameSession_PlaceBid_CancelsTimer()
     {
         var service = new MultiplayerGameService();
-        var session = new GameSession(service);
+        var session = new GameSession(service, new StubStorage());
         session.GameMode = "local";
         await session.StartConfiguredLocalMatchAsync();
 
@@ -269,7 +279,7 @@ public class TurnTimerTests
     public async Task GameSession_PlayCard_CancelsTimer()
     {
         var service = new MultiplayerGameService();
-        var session = new GameSession(service);
+        var session = new GameSession(service, new StubStorage());
         session.GameMode = "local";
         await session.StartConfiguredLocalMatchAsync();
 
@@ -313,7 +323,7 @@ public class TurnTimerTests
     public void GameSession_Dispose_CancelsTimer()
     {
         var service = new MultiplayerGameService();
-        var session = new GameSession(service);
+        var session = new GameSession(service, new StubStorage());
         session.Dispose();
         Assert.False(session.IsTurnTimerActive);
     }
@@ -322,7 +332,7 @@ public class TurnTimerTests
     public void GameSession_ReturnToMenu_CancelsTimer()
     {
         var service = new MultiplayerGameService();
-        var session = new GameSession(service);
+        var session = new GameSession(service, new StubStorage());
         session.ReturnToMenu();
         Assert.False(session.IsTurnTimerActive);
     }
@@ -331,7 +341,7 @@ public class TurnTimerTests
     public async Task GameSession_NoTimer_AfterGameComplete()
     {
         var service = new MultiplayerGameService();
-        var session = new GameSession(service);
+        var session = new GameSession(service, new StubStorage());
         session.GameMode = "local";
         await session.StartConfiguredLocalMatchAsync();
 
@@ -374,5 +384,142 @@ public class TurnTimerTests
         }
 
         Assert.False(session.IsTurnTimerActive);
+    }
+
+    [Fact]
+    public void FullMatch_CompletesAllRounds()
+    {
+        var engine = GameEngine.CreateDefault();
+        engine.StartNewMatch();
+
+        while (engine.Phase != GamePhase.MatchComplete)
+        {
+            if (engine.IsTrickResolutionPending)
+            {
+                engine.ResolvePendingTrick();
+                continue;
+            }
+
+            if (engine.Phase == GamePhase.Bidding)
+            {
+                var allowed = engine.GetAllowedBids(engine.CurrentTurnIndex);
+                if (allowed.Count > 0)
+                {
+                    var bid = allowed[^1]; // last allowed = safe bid
+                    engine.PlaceBid(bid);
+                }
+            }
+            else if (engine.Phase == GamePhase.TrickPlaying)
+            {
+                var legal = engine.GetLegalCards(engine.CurrentTurnIndex);
+                if (legal.Count > 0)
+                {
+                    engine.PlayCard(legal[0]);
+                }
+            }
+            else if (engine.Phase == GamePhase.RoundComplete)
+            {
+                engine.AdvanceToNextRound();
+            }
+        }
+
+        Assert.Equal(GamePhase.MatchComplete, engine.Phase);
+        Assert.All(engine.Players, p => Assert.True(p.Score >= 0));
+    }
+
+    [Fact]
+    public void MatchHistory_PersistsAndLoadsCorrectly()
+    {
+        var service = new MultiplayerGameService();
+        var storage = new StubStorage();
+        var session = new GameSession(service, storage);
+
+        // Create a match history record manually
+        var record = new GameSession.MatchHistoryRecord(
+            "local", 5, 0, 1,
+            new Dictionary<string, int> { { "Alice", 42 }, { "Bot1", 30 } },
+            DateTimeOffset.UtcNow);
+        session.LoadMatchHistory(System.Text.Json.JsonSerializer.Serialize(
+            new[] { new { GameMode = "local", RoundNumber = 5, DealerIndex = 0, LeaderIndex = 1, Scores = record.Scores, CompletedAt = record.CompletedAt } }));
+
+        var history = session.GetMatchHistory();
+        Assert.Single(history);
+        Assert.Equal("local", history[0].GameMode);
+        Assert.Equal(5, history[0].RoundNumber);
+
+        // Save and reload in a new session
+        var json = session.SaveMatchHistory();
+        var session2 = new GameSession(service, storage);
+        session2.LoadMatchHistory(json);
+        var reloaded = session2.GetMatchHistory();
+        Assert.Single(reloaded);
+        Assert.Equal("local", reloaded[0].GameMode);
+        Assert.Equal(5, reloaded[0].RoundNumber);
+    }
+
+    [Fact]
+    public async Task Session_Dispose_CleansUpResources()
+    {
+        var service = new MultiplayerGameService();
+        var session = new GameSession(service, new StubStorage());
+        session.GameMode = "local";
+        await session.StartConfiguredLocalMatchAsync();
+        Assert.True(session.HasActiveMatch);
+
+        session.Dispose();
+
+        // After dispose, session should be safe to access (disposed flag prevents double-dispose)
+        session.Dispose(); // should not throw
+        Assert.False(session.IsTurnTimerActive);
+    }
+
+    [Fact]
+    public async Task BotDifficulty_EasyPlayerCreated()
+    {
+        var service = new MultiplayerGameService();
+        var session = new GameSession(service, new StubStorage());
+        session.GameMode = "local";
+        session.SelectedBotDifficulty = BotDifficulty.Easy;
+        await session.StartConfiguredLocalMatchAsync();
+
+        var bots = session.Engine.Players.Where(p => !p.IsHuman).ToList();
+        Assert.All(bots, b => Assert.Equal(BotDifficulty.Easy, b.Difficulty));
+    }
+
+    [Fact]
+    public async Task Emoji_LimitExceeded_ReturnsFalse()
+    {
+        var service = new MultiplayerGameService();
+        var room = service.CreateRoom("s1", "p1", "Host", 4, "emerald", "svg", "easy", true);
+        service.JoinRoom(room.RoomCode, "s2", "p2", "Guest");
+        service.StartGameAsync(room.RoomCode, "s1");
+
+        // Send 5 emojis (the limit)
+        for (int i = 0; i < 5; i++)
+        {
+            Assert.True(service.SendEmoji(room.RoomCode, "s1", "👍"));
+        }
+        // 6th should fail
+        Assert.False(service.SendEmoji(room.RoomCode, "s1", "👍"));
+    }
+
+    [Fact]
+    public async Task Emoji_InvalidEmoji_ReturnsFalse()
+    {
+        var service = new MultiplayerGameService();
+        var room = service.CreateRoom("s1", "p1", "Host", 4, "emerald", "svg", "easy", true);
+        service.JoinRoom(room.RoomCode, "s2", "p2", "Guest");
+        service.StartGameAsync(room.RoomCode, "s1");
+
+        Assert.False(service.SendEmoji(room.RoomCode, "s1", ""));
+        Assert.False(service.SendEmoji(room.RoomCode, "s1", "not-an-emoji"));
+    }
+
+    [Fact]
+    public async Task SelectedBotDifficulty_DefaultIsEasy()
+    {
+        var service = new MultiplayerGameService();
+        var session = new GameSession(service, new StubStorage());
+        Assert.Equal(BotDifficulty.Easy, session.SelectedBotDifficulty);
     }
 }

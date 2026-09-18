@@ -1,0 +1,160 @@
+@using OhHell.Components.Services
+@inject GameSession Session
+@inject IPlatformStorage Storage
+
+<div class="club-shell" data-ready="@(Ready ? "true" : "false")" aria-busy="@(!Ready)">
+    <header class="club-header">
+        <a class="club-brand" href="/" aria-label="Oh Hell home"><span aria-hidden="true">♠</span> OH HELL <small>THE CARD CLUB</small></a>
+        <button disabled="@(!Ready)" class="club-identity" @onclick="() => Select(ClubSection.Profile)"><span class="club-avatar" aria-hidden="true">♔</span><span>@DisplayName<small>Your seat is waiting</small></span></button>
+    </header>
+    <div class="club-main">
+        @if (section == ClubSection.Play)
+        {
+            <div class="club-heading"><span class="club-eyebrow">A LITTLE LUCK. A LOT OF STRATEGY.</span><h1>Your next great hand.</h1><p>Read the table. Make your bid. Play it just right.</p></div>
+            <div class="club-play-layout">
+                <section class="club-hero" aria-labelledby="club-game-title">
+                    <span class="club-ribbon">THE ORIGINAL · 3–6 PLAYERS</span>
+                    <div class="club-card-scene" aria-hidden="true"><div class="club-orbit"></div><div class="club-art-card club-art-left">K<span>♣</span><b>♚</b></div><div class="club-art-card club-art-right">Q<span>♥</span><b>♛</b></div><div class="club-art-card club-art-center">A<span>♠</span><b>♠</b></div><i class="club-spark spark-one">✦</i><i class="club-spark spark-two">✦</i></div>
+                    <h2 id="club-game-title">OH HELL</h2><p>Big calls. Clever plays. One more round.</p>
+                    <button disabled="@(!Ready || launching)" class="club-gold" @onclick="StartPractice">@(launching ? "Dealing your hand…" : "PLAY OH HELL") <span aria-hidden="true">➜</span></button>
+                    <div class="club-difficulty-row">
+                        <label class="club-difficulty-label">Bot difficulty:</label>
+                        <select class="club-difficulty-select" @bind="SelectedDifficulty">
+                            <option value="Easy">Easy</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Hard">Hard</option>
+                        </select>
+                    </div>
+                    <small class="club-caption">Instant practice with bots · No account needed</small>
+                    @if (error is not null) { <p role="alert">@error</p> }
+                </section>
+                <aside class="club-side">
+                    <button disabled="@(!Ready)" class="club-feature club-friends" @onclick="() => Select(ClubSection.Friends)"><span class="club-feature-icon" aria-hidden="true">♧</span><span><small>BETTER TOGETHER</small><strong>Bring your friends</strong><em>Create a table. Share the good times.</em></span><b aria-hidden="true">›</b></button>
+                    <button disabled="@(!Ready)" class="club-feature club-learn" @onclick="() => Select(ClubSection.Journey)"><span class="club-feature-icon" aria-hidden="true">♜</span><span><small>LEARN THE LITTLE TRICKS</small><strong>Find your game</strong><em>Three simple lessons to get started.</em></span><b aria-hidden="true">›</b></button>
+                    <div class="club-tip"><span aria-hidden="true">✧</span><p><strong>The perfect bid beats a big bid.</strong> You score a bonus when the tricks you win match your prediction.</p></div>
+                </aside>
+            </div>
+            <section class="club-online"><div class="club-section-heading"><h2>Meet at the table</h2><span>CREATE OR JOIN A ROOM</span></div>@OnlineContent</section>
+        }
+        else if (section == ClubSection.Collection)
+        {
+            <div class="club-heading"><span class="club-eyebrow">MAKE YOURSELF AT HOME</span><h1>Your table. Your style.</h1><p>Choose a felt for your next table. Every choice plays by the same rules.</p></div>
+            <div class="club-collection">
+                @foreach (var theme in Themes)
+                {
+                    <button disabled="@(!Ready)" class="club-theme @(Session.BoardTheme == theme.Id ? "is-equipped" : "")" aria-pressed="@(Session.BoardTheme == theme.Id)" @onclick="() => SetTheme(theme.Id)"><span class="club-theme-preview @theme.Id"><b>♠</b><i>♥</i></span><strong>@theme.Name</strong><small>@theme.Description</small><span class="club-equip">@(Session.BoardTheme == theme.Id ? "✓ Equipped" : "Use this table")</span></button>
+                }
+            </div>
+            <p class="club-note" role="status">@appearanceStatus</p>
+        }
+        else if (section == ClubSection.Friends)
+        {
+            <div class="club-heading"><span class="club-eyebrow">SAVE A SEAT</span><h1>Good company. Great cards.</h1><p>Create a room below, then copy its invitation link for your friends.</p></div>
+            <div class="club-info-strip"><span aria-hidden="true">♧</span><p>No friend account required. Room links work today; saved friend lists are planned.</p></div>
+            <section class="club-online">@OnlineContent</section>
+        }
+        else if (section == ClubSection.Journey)
+        {
+            <div class="club-heading"><span class="club-eyebrow">FROM FIRST HAND TO CLEVER PLAY</span><h1>Learn the little tricks.</h1><p>A quick guide to the Oh Hell rules used at this table.</p></div>
+            <div class="club-lessons">
+                @for (var index = 0; index < Lessons.Length; index++)
+                {
+                    var lessonIndex = index;
+                    <details class="club-lesson" open="@(index == 0)"><summary><span>@(index + 1)</span><strong>@Lessons[lessonIndex].Title</strong><b aria-hidden="true">+</b></summary><p>@Lessons[lessonIndex].Text</p></details>
+                }
+            </div>
+            <div class="club-tip"><span aria-hidden="true">✦</span><p><strong>Pro tip:</strong> Start with the Easy bot difficulty to practice. You can find it under the player count when creating a room. Watch how the bots play and learn from their moves!</p></div>
+            <button disabled="@(!Ready || launching)" class="club-gold club-practice" @onclick="StartPractice">TRY A PRACTICE MATCH <span aria-hidden="true">➜</span></button>
+            <small class="club-caption">Practice uses the Easy bot by default — perfect for learning</small>
+            @if (error is not null) { <p role="alert">@error</p> }
+        }
+        else
+        {
+            <div class="club-heading"><span class="club-eyebrow">YOUR CORNER OF THE CLUB</span><h1>Hello, @DisplayName.</h1><p>Your name and appearance belong to this device. Online accounts are not connected yet.</p></div>
+            <section class="club-profile"><span class="club-profile-avatar" aria-hidden="true">♔</span><div><label for="club-name">Table name</label><input id="club-name" maxlength="24" @bind="profileName" placeholder="Choose a nickname" /><button disabled="@(!Ready || launching)" class="club-gold" @onclick="SaveName">SAVE NAME</button><p role="status">@profileStatus</p></div></section>
+            <section class="club-score-history"><h2>Local scorebook</h2><p>Lifetime totals stored on this device. These are not verified rankings or full match history.</p>@if (Session.LifetimeScores.Count == 0) { <p class="club-note">A fresh scorebook. Finish a match to start your story.</p> } else { @foreach (var score in Session.LifetimeScores.OrderByDescending(s => s.Value)) { <div><strong>@score.Key</strong><span>@score.Value points</span></div> } }</section>
+            <section class="club-match-history"><h2>Recent matches</h2><p>Last 10 completed matches stored on this device.</p>@if (matchHistoryLoaded && Session.GetMatchHistory().Count == 0) { <p class="club-note">No matches played yet. Start a practice match to begin.</p> } else if (matchHistoryLoaded) { @foreach (var match in Session.GetMatchHistory().TakeLast(10).Reverse()) { <div class="match-history-row"><span>@match.GameMode</span><span>R@match.RoundNumber</span><span>@match.CompletedAt.ToLocalTime().ToString("MMM dd HH:mm")</span></div> } }</section>
+        }
+    </div>
+    <nav class="club-nav" aria-label="Card club sections">
+        @foreach (var item in NavigationItems)
+        {
+            <button disabled="@(!Ready)" class="@(section == item.Section ? "is-active" : "") @(item.Section == ClubSection.Play ? "club-nav-play" : "")" aria-current="@(section == item.Section ? "page" : null)" @onclick="() => Select(item.Section)"><span aria-hidden="true">@item.Icon</span><strong>@item.Label</strong></button>
+        }
+    </nav>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? OnlineContent { get; set; }
+    [Parameter] public bool IsReady { get; set; }
+    private bool preferencesLoaded;
+    private bool matchHistoryLoaded;
+    private bool Ready => IsReady && preferencesLoaded;
+    private enum ClubSection { Collection, Friends, Play, Journey, Profile }
+    private ClubSection section = ClubSection.Play;
+    private string profileName = "";
+    private string profileStatus = "";
+    private string appearanceStatus = "Changes apply to your next table.";
+    private string? error;
+    private bool launching;
+    private string SelectedDifficulty { get; set; } = "Easy";
+    private string DisplayName => string.IsNullOrWhiteSpace(Session.MultiplayerName) ? "Guest" : Session.MultiplayerName;
+    private static readonly (ClubSection Section, string Label, string Icon)[] NavigationItems = [(ClubSection.Collection, "Collection", "▧"), (ClubSection.Friends, "Friends", "♧"), (ClubSection.Play, "Play", "♠"), (ClubSection.Journey, "Journey", "♜"), (ClubSection.Profile, "Profile", "♔")];
+    private static readonly (string Id, string Name, string Description)[] Themes = [("emerald", "Emerald club", "The classic green table"), ("royal", "Royal evening", "A little midnight magic"), ("sunset", "Golden hour", "Warm hands, brighter evenings")];
+    private static readonly (string Title, string Text)[] Lessons = [
+        ("The Goal: Predict and Win",
+            "Oh Hell is a trick-taking card game for 3-6 players. Before each round, every player bids how many tricks they expect to win. The key is accuracy — match your bid exactly for a bonus of 10 + your bid. Win a different number of tricks than you bid, and you only score the tricks you won, with no bonus."),
+        ("The Deal and Trump",
+            "Each round deals fewer cards than the last (starting from the max, then decreasing). A single card is flipped face-up to determine the trump suit for the round. Trump cards beat all non-trump cards."),
+        ("Bidding Strategy",
+            "You bid after seeing your hand. Consider: high cards (Ace, King) are strong. Void suits (no cards of that suit) let you trump opponents' leads. Position matters — bidding last lets you see others' bids first. The total bid cannot equal the number of tricks available — the last bidder is forbidden from making the total match exactly."),
+        ("Following the Lead",
+            "When a player leads a trick, you must follow suit if you can. If you can't follow suit, play any card — including trump. The highest trump card wins; with no trump played, the highest card of the leading suit wins."),
+        ("Scoring",
+            "If your bid matches your tricks won: score 10 + bid. Otherwise: score exactly the tricks you won. This means bidding 0 and winning 0 gives 10 points! The player with the most points after all rounds wins the match."),
+        ("Quick Reference",
+            "Trump beats all. Follow suit if you can. Bid wisely — accuracy beats ambition. Zero bids are powerful when you can pull them off. Watch the scoreboard to track everyone's progress.")
+    ];
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var theme = await Storage.GetItemAsync("ohhell.appearance.table");
+        if (Themes.Any(t => t.Id == theme)) Session.BoardTheme = theme!;
+        var name = await Storage.GetItemAsync("ohhell.profile.name");
+        if (!string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(Session.MultiplayerName)) Session.MultiplayerName = name[..Math.Min(name.Length, 24)];
+        profileName = Session.MultiplayerName;
+        await Session.LoadMatchHistoryFromStorageAsync();
+        matchHistoryLoaded = true;
+        preferencesLoaded = true;
+        Session.StateChanged += OnSessionStateChanged;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnSessionStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+    private void Select(ClubSection value) { section = value; profileName = Session.MultiplayerName; }
+    private async Task SetTheme(string id) { Session.BoardTheme = id; await Storage.SetItemAsync("ohhell.appearance.table", id); appearanceStatus = $"{Themes.First(t => t.Id == id).Name} selected for your next table."; }
+    private async Task SaveName() { Session.MultiplayerName = profileName.Trim(); Session.LocalPlayerName = DisplayName; await Storage.SetItemAsync("ohhell.profile.name", Session.MultiplayerName); profileStatus = "Table name updated for this device."; }
+    private async Task StartPractice()
+    {
+        if (!Ready || launching) return;
+        launching = true; error = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(Session.MultiplayerName))
+            {
+                Session.MultiplayerName = $"Guest {Guid.NewGuid().ToString("N")[..6]}";
+                profileName = Session.MultiplayerName;
+                await Storage.SetItemAsync("ohhell.profile.name", Session.MultiplayerName);
+            }
+            Session.LocalPlayerName = DisplayName;
+            if (Enum.TryParse<OhHell.Core.BotDifficulty>(SelectedDifficulty, true, out var difficulty))
+                Session.SelectedBotDifficulty = difficulty;
+            await Session.StartConfiguredLocalMatchAsync();
+        }
+        catch { error = "We couldn't start this hand. Please try again."; }
+        finally { launching = false; }
+    }
+}

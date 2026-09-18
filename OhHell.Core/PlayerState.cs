@@ -2,15 +2,18 @@ namespace OhHell.Core;
 
 public sealed class PlayerState
 {
-    public PlayerState(string name, bool isHuman)
+    public PlayerState(string name, bool isHuman, BotDifficulty difficulty = BotDifficulty.Hard)
     {
         Name = name;
         IsHuman = isHuman;
+        Difficulty = difficulty;
     }
 
     public string Name { get; }
     public bool IsHuman { get; }
+    public BotDifficulty Difficulty { get; }
     public List<Card> Hand { get; } = new();
+    public int HandCount => Hand.Count;
     public int? Bid { get; set; }
     public int TricksWon { get; set; }
     public int Score { get; set; }

@@ -14,8 +14,8 @@ public sealed class GameLobbyHub(MultiplayerGameService multiplayerGameService) 
 
     public async Task<bool> JoinRoom(string roomCode, string playerName)
     {
-        var room = multiplayerGameService.JoinRoom(roomCode, Context.ConnectionId, Context.ConnectionId, playerName);
-        if (room is null)
+        var (room, result) = multiplayerGameService.JoinRoom(roomCode, Context.ConnectionId, Context.ConnectionId, playerName);
+        if (room is null || result != MultiplayerGameService.JoinRoomResult.Success)
         {
             return false;
         }
@@ -26,6 +26,7 @@ public sealed class GameLobbyHub(MultiplayerGameService multiplayerGameService) 
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        multiplayerGameService.NotifySessionDisconnected(Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
 }

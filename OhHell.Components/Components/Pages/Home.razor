@@ -17,18 +17,21 @@
     private bool showMobileMenu;
     private bool showScoreboard;
     private bool showActivity;
+    private bool showEmoji;
+    private bool showExitConfirm;
     private bool showBidPopup;
     private bool showCurvedHand = false;
     private bool browserSessionLoaded;
     private bool lifetimeScoresLoaded;
     private string? shareRoomUrl;
+    private string? emojiStatus;
     private string? lastToastMessage;
     private string? lastPersistedLifetimeScoresJson;
     private string? lastPersistedReconnectJson;
     private bool openedFromRoomLink;
     private ElementReference joinNameInput;
 
-    private sealed record ReconnectState(string RoomCode, string PlayerName);
+    private sealed record ReconnectState(string RoomCode, string PlayerName, string? SessionToken);
 
     protected override async Task OnInitializedAsync()
     {
@@ -73,7 +76,7 @@
             openedFromRoomLink = true;
             Session.GameMode = "online";
             Session.RoomCodeInput = roomCode.ToString().Trim().ToUpperInvariant();
-            Session.MultiplayerStatusMessage = "Enter your name to join this room.";
+            Session.MultiplayerStatusMessage = "Join as a guest, or choose a table name.";
         }
     }
 
@@ -134,10 +137,10 @@
                     }
                     else
                     {
-                        await Session.TryRestoreOnlineRoomAsync(reconnectState.RoomCode, reconnectState.PlayerName);
+                        await Session.TryRestoreOnlineRoomAsync(reconnectState.RoomCode, reconnectState.PlayerName, reconnectState.SessionToken);
                     }
 
-                    lastPersistedReconnectJson = NormalizeReconnectJson(Session.CurrentRoomCode, Session.MultiplayerName);
+                    lastPersistedReconnectJson = NormalizeReconnectJson(Session.CurrentRoomCode, Session.MultiplayerName, Session.SessionToken);
                 }
             }
         }
@@ -180,7 +183,7 @@
             return;
         }
 
-        var json = NormalizeReconnectJson(Session.CurrentRoomCode, Session.MultiplayerName);
+        var json = NormalizeReconnectJson(Session.CurrentRoomCode, Session.MultiplayerName, Session.SessionToken);
         if (json == lastPersistedReconnectJson)
         {
             return;
@@ -214,14 +217,14 @@
         return JsonSerializer.Serialize(ordered);
     }
 
-    private static string? NormalizeReconnectJson(string? roomCode, string? playerName)
+    private static string? NormalizeReconnectJson(string? roomCode, string? playerName, string? sessionToken = null)
     {
         if (string.IsNullOrWhiteSpace(roomCode) || string.IsNullOrWhiteSpace(playerName))
         {
             return null;
         }
 
-        return JsonSerializer.Serialize(new ReconnectState(roomCode.Trim().ToUpperInvariant(), playerName.Trim()));
+        return JsonSerializer.Serialize(new ReconnectState(roomCode.Trim().ToUpperInvariant(), playerName.Trim(), sessionToken));
     }
 
     private async Task CopyShareLink()
@@ -320,6 +323,13 @@
 
     private async Task BackToMenu()
     {
+        if (Session.HasActiveMatch && !showExitConfirm)
+        {
+            showExitConfirm = true;
+            return;
+        }
+        showExitConfirm = false;
+        showMobileMenu = false;
         await Session.LeaveOnlineRoomAsync();
     }
 
@@ -333,6 +343,16 @@
     private void ToggleMobileMenu() => showMobileMenu = !showMobileMenu;
     private void ToggleScoreboard() => showScoreboard = !showScoreboard;
     private void ToggleActivity() => showActivity = !showActivity;
+    private void ToggleEmoji() => showEmoji = !showEmoji;
+    private async Task SendEmoji(string emoji)
+    {
+        if (await Session.SendEmojiAsync(emoji))
+        {
+            showEmoji = false;
+            emojiStatus = null;
+        }
+        else emojiStatus = "Not sent. Limit: 5 per minute. Check your room connection and try again.";
+    }
     private void ToggleHandCurve() => showCurvedHand = !showCurvedHand;
     private string ThemeClass => $"theme-{Session.BoardTheme} cards-{Session.CardTheme}";
     private bool UseSvgCards => string.Equals(Session.CardTheme, "svg", StringComparison.OrdinalIgnoreCase);
@@ -349,6 +369,7 @@
             ? "bid-under"
             : "bid-on";
     private IEnumerable<int> BidChoices => Enumerable.Range(0, Session.Engine.CardsPerPlayer + 1);
+    private bool IsRoomDestroyed => false;
 
     private bool CanPlay(Card card)
     {
@@ -596,31 +617,18 @@
         return leadSuit != trumpSuit && play.Card.Suit == trumpSuit;
     }
 
-    private async Task<bool> EnsurePlayerNameAsync()
+    private Task<bool> EnsurePlayerNameAsync()
     {
-        if (!string.IsNullOrWhiteSpace(Session.MultiplayerName))
+        if (string.IsNullOrWhiteSpace(Session.MultiplayerName))
         {
-            return true;
+            Session.MultiplayerName = $"Guest {Guid.NewGuid().ToString("N")[..6]}";
         }
-
-        Session.MultiplayerStatusMessage = "Player name is required.";
-        await InvokeAsync(StateHasChanged);
-
-        try
-        {
-            await joinNameInput.FocusAsync();
-        }
-        catch
-        {
-        }
-
-        return false;
+        return Task.FromResult(true);
     }
 }
 
-@if (!Session.HasActiveMatch && !Session.IsInOnlineRoom)
-{
-    <div class="app-frame menu-frame">
+@code {
+    private RenderFragment LobbyContent => @<div class="app-frame menu-frame">
         <div class="menu-screen @ThemeClass">
             <div class="menu-card mobile-menu-card @(IsRoomLinkJoinMode ? "link-join-card" : string.Empty)">
                 <div class="menu-header mobile-menu-header">
@@ -630,7 +638,7 @@
 
                 <div class="landing-stack">
                     <section class="menu-panel mobile-form-panel create-room-panel">
-                        <label><span>Player Name</span><input @ref="joinNameInput" @bind="Session.MultiplayerName" placeholder="Enter your name" maxlength="24" /></label>
+                        <label><span>Table name (optional)</span><input @ref="joinNameInput" @bind="Session.MultiplayerName" placeholder="Join as a guest" maxlength="24" /></label>
                     @if (!IsRoomLinkJoinMode)
                     {
                         <div class="create-room-bar">
@@ -640,17 +648,17 @@
                                     <option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option>
                                 </select>
                             </label>
-                            <button class="primary large-action" @onclick="CreateRoomWithValidation">Create New Room</button>
+                            <button class="primary large-action" disabled="@(!browserSessionLoaded)" @onclick="CreateRoomWithValidation">@(browserSessionLoaded ? "Create New Room" : "Connecting…")</button>
                         </div>
                     }
                     else
                     {
                         <div class="link-room-code">Room Code: <strong>@Session.RoomCodeInput</strong></div>
-                        <button class="primary large-action" @onclick="JoinRoomFromLinkAsync">Join This Room</button>
+                        <button class="primary large-action" disabled="@(!browserSessionLoaded)" @onclick="JoinRoomFromLinkAsync">@(browserSessionLoaded ? "Join This Room" : "Connecting…")</button>
                     }
                     @if (!string.IsNullOrWhiteSpace(Session.MultiplayerStatusMessage))
                     {
-                        <p class="multiplayer-status">@Session.MultiplayerStatusMessage</p>
+                        <p class="multiplayer-status @(Session.MultiplayerStatusMessage.Contains("Unable") || Session.MultiplayerStatusMessage.Contains("no longer") || Session.MultiplayerStatusMessage.Contains("taken") ? "status-error" : "status-info")">@Session.MultiplayerStatusMessage</p>
                     }
                     </section>
 
@@ -679,11 +687,11 @@
                                     </div>
                                     @if (room.CanRejoin)
                                     {
-                                        <button class="primary room-action-button" @onclick="() => JoinListedRoom(room.RoomCode)">Rejoin</button>
+                                        <button class="primary room-action-button" disabled="@(!browserSessionLoaded)" @onclick="() => JoinListedRoom(room.RoomCode)">Rejoin</button>
                                     }
                                     else if (room.CanJoin)
                                     {
-                                        <button class="secondary room-action-button" @onclick="() => JoinListedRoom(room.RoomCode)">Join</button>
+                                        <button class="secondary room-action-button" disabled="@(!browserSessionLoaded)" @onclick="() => JoinListedRoom(room.RoomCode)">Join</button>
                                     }
                                     else
                                     {
@@ -696,7 +704,19 @@
                 </div>
             </div>
         </div>
-    </div>
+    </div>;
+}
+
+@if (!Session.HasActiveMatch && !Session.IsInOnlineRoom)
+{
+    if (IsRoomLinkJoinMode)
+    {
+        @LobbyContent
+    }
+    else
+    {
+        <ClubHome OnlineContent="LobbyContent" IsReady="browserSessionLoaded" />
+    }
 }
 else if (Session.IsInOnlineRoom && !Session.HasActiveMatch)
 {
@@ -753,7 +773,7 @@ else
             <header class="game-topbar refined-topbar">
                 <button class="nav-icon" @onclick="ToggleMobileMenu">☰</button>
                 <div class="topbar-main">
-                    <strong>@($"Room {Session.CurrentRoomCode}")</strong>
+                    <strong>@(Session.IsInOnlineRoom ? $"Room {Session.CurrentRoomCode}" : "Oh Hell · Practice")</strong>
                     <span>@(Session.IsDealing ? "Dealing..." : engine.StatusMessage)</span>
                 </div>
                 <div class="topbar-side">
@@ -768,6 +788,10 @@ else
                     <div class="desktop-menu">
                         <button class="drawer-link topbar-link" @onclick="ToggleScoreboard">@(showScoreboard ? "Hide Scores" : "Scores")</button>
                         <button class="drawer-link topbar-link" @onclick="ToggleActivity">@(showActivity ? "Hide Activity" : "Activity")</button>
+                        @if (Session.IsOnlineGameStarted)
+                        {
+                            <button class="drawer-link topbar-link" @onclick="ToggleEmoji">@(showEmoji ? "Hide Emoji" : "Emoji")</button>
+                        }
                         <button class="drawer-link topbar-link" @onclick="ResetGame">Reset Game</button>
                         <button class="drawer-link topbar-link" @onclick="BackToMenu">Menu</button>
                     </div>
@@ -779,6 +803,10 @@ else
                 <div class="mobile-drawer bottom-sheet-drawer">
                     <button class="drawer-link" @onclick="ToggleScoreboard">@(showScoreboard ? "Hide" : "Show") Scores</button>
                     <button class="drawer-link" @onclick="ToggleActivity">@(showActivity ? "Hide" : "Show") Activity</button>
+                    @if (Session.IsOnlineGameStarted)
+                    {
+                        <button class="drawer-link" @onclick="ToggleEmoji">@(showEmoji ? "Hide" : "Show") Emoji</button>
+                    }
                     <button class="drawer-link" @onclick="ResetGame">Reset Game</button>
                     <button class="drawer-link" @onclick="BackToMenu">Menu</button>
                 </div>
@@ -816,6 +844,7 @@ else
                     @foreach (var seatEntry in opponentEntries)
                     {
                         <div class="player-seat orbit-seat @(SeatStateClass(seatEntry.index))" style="@SeatStyle(seatEntry.index)">
+                            <SeatReaction Message="Session.RecentEmojis.FirstOrDefault(item => item.PlayerIndex == seatEntry.index)" />
                             <div class="seat-name">@seatEntry.player.Name @if (!string.IsNullOrWhiteSpace(MarkerFor(seatEntry.index))) { <span class="mini-badge seat-marker">@MarkerFor(seatEntry.index)</span> }</div>
                             <div class="seat-stats">
                                 <span class="seat-round-line">Won @seatEntry.player.TricksWon · Bid @((seatEntry.player.Bid?.ToString()) ?? "-")</span>
@@ -859,7 +888,32 @@ else
                     </div>
 
                     <div class="player-seat orbit-seat human-seat current-human bottom-hand-zone @SeatStateClass(bottomIndex)">
+                        <SeatReaction Message="Session.RecentEmojis.FirstOrDefault(item => item.PlayerIndex == bottomIndex)" />
                         <div class="my-info">
+                            @if (Session.IsOnlineGameStarted)
+                            {
+                                <div class="reaction-controls">
+                                    <button class="reaction-toggle" aria-label="Send emoji" aria-expanded="@showEmoji" aria-controls="reaction-picker" @onclick="ToggleEmoji">&#128522;</button>
+                                    @if (showEmoji)
+                                    {
+                                        <section id="reaction-picker" class="reaction-picker" aria-label="Choose a reaction">
+                                            <div class="reaction-picker-heading">
+                                                <strong>Reactions</strong>
+                                                <button aria-label="Close reactions" @onclick="ToggleEmoji">Close</button>
+                                            </div>
+                                            <div class="reaction-grid">
+                                                @foreach (var emoji in Session.PresetEmojis)
+                                                {
+                                                    <button aria-label="@("Send " + emoji)" @onclick="() => SendEmoji(emoji)">@emoji</button>
+                                                }
+                                            </div>
+                                            <button class="reaction-mute" aria-pressed="@Session.ReactionsMuted" @onclick="Session.ToggleReactionsMuted">@(Session.ReactionsMuted ? "Show reactions" : "Mute reactions")</button>
+                                            <small>Up to 5 reactions per minute.</small>
+                                            @if (emojiStatus is not null) { <p role="status">@emojiStatus</p> }
+                                        </section>
+                                    }
+                                </div>
+                            }
                             <div class="seat-name">@bottomPlayer.Name @if (!string.IsNullOrWhiteSpace(MarkerFor(bottomIndex))) { <span class="mini-badge seat-marker">@MarkerFor(bottomIndex)</span> }</div>
                             <div class="seat-stats inline-seat-stats">
                                 <span class="seat-round-line">Won @bottomPlayer.TricksWon · Bid @((bottomPlayer.Bid?.ToString()) ?? "-")</span>
@@ -968,16 +1022,17 @@ else
             @if (Session.ShowNextRoundPopup)
             {
                 <div class="popup-overlay">
-                    <div class="popup-card scoreboard-popup-card">
-                        <h3>Round Complete</h3>
+                    <div class="popup-card scoreboard-popup-card round-popup-card">
+                        <h3>Round @Session.Engine.RoundNumber Complete</h3>
                         <div class="popup-score-list">
                             @foreach (var player in engine.Players)
                             {
+                                var sign = player.RoundScoreDelta >= 0 ? "+" : "";
                                 <div class="popup-score-row scoreboard-bold @(IsSuccessfulBid(player) ? "bid-success" : "bid-fail")">
-                                    <span>@player.Name</span>
-                                    <span>Bid @((player.Bid?.ToString()) ?? "-")</span>
-                                    <span>Won @player.TricksWon</span>
-                                    <span>@TotalScoreLabel(player) @if (HasTopScore(player)) { <span class="leader-crown" title="Top score">👑</span> }</span>
+                                    <span class="popup-player-name">@player.Name</span>
+                                    <span class="popup-detail">Bid @((player.Bid?.ToString()) ?? "-") &middot; Won @player.TricksWon</span>
+                                    <span class="popup-delta">@sign@player.RoundScoreDelta</span>
+                                    <span class="popup-total">Total @player.Score @if (HasTopScore(player)) { <span class="leader-crown" title="Top score">👑</span> }</span>
                                 </div>
                             }
                         </div>
@@ -991,24 +1046,47 @@ else
 
             @if (ShowMatchCompletePopup)
             {
+                var winner = engine.Players.OrderByDescending(p => p.Score).First();
+                var isHumanWin = winner.IsHuman;
                 <div class="popup-overlay">
                     <div class="popup-card scoreboard-popup-card match-popup-card">
                         <h3>Match Complete</h3>
+                        @if (engine.Players.Count > 1)
+                        {
+                            <div class="match-winner @(isHumanWin ? "human-winner" : "")">
+                                <span class="winner-crown">👑</span>
+                                <span class="winner-name">@winner.Name Wins!</span>
+                            </div>
+                        }
                         <div class="popup-score-list">
+                            @{ var rank = 0; }
                             @foreach (var player in engine.Players.OrderByDescending(player => player.Score).ThenBy(player => player.Name))
                             {
-                                <div class="popup-score-row scoreboard-bold @(engine.MatchLeaders.Contains(player) ? "bid-success" : string.Empty)">
-                                    <span>@player.Name</span>
-                                    <span>Bid @((player.Bid?.ToString()) ?? "-")</span>
-                                    <span>Won @player.TricksWon</span>
-                                    <span>@TotalScoreLabel(player) @if (HasTopScore(player)) { <span class="leader-crown" title="Top score">👑</span> }</span>
+                                rank++;
+                                <div class="popup-score-row scoreboard-bold @(rank == 1 ? "bid-success" : string.Empty)">
+                                    <span class="popup-rank">#@rank</span>
+                                    <span class="popup-player-name">@player.Name</span>
+                                    <span class="popup-total">Score @player.Score</span>
                                 </div>
                             }
                         </div>
-
                         <div class="popup-actions">
-                            <button class="secondary" @onclick="BackToMenu">Menu</button>
-                            <button class="primary" @onclick="ResetGame">Reset Game</button>
+                            <button class="secondary" @onclick="BackToMenu">Lobby</button>
+                            <button class="primary" @onclick="ResetGame">Play Again</button>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (showExitConfirm)
+            {
+                <div class="popup-overlay" @onclick="() => showExitConfirm = false">
+                    <div class="popup-card exit-confirm-card" @onclick:stopPropagation>
+                        <h3>Leave Match?</h3>
+                        <p class="exit-confirm-text">Your current match progress will be lost. Are you sure you want to leave?</p>
+                        <div class="popup-actions">
+                            <button class="secondary" @onclick="() => showExitConfirm = false">Stay</button>
+                            <button class="primary exit-confirm-leave" @onclick="BackToMenu">Leave Match</button>
                         </div>
                     </div>
                 </div>

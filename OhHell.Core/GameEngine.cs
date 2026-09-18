@@ -16,7 +16,7 @@ public sealed class GameEngine
     {
         random = seed.HasValue ? new Random(seed.Value) : new Random();
         deck = new Deck(random);
-        players = playerDefinitions.Select(definition => new PlayerState(definition.Name, definition.IsHuman)).ToList();
+        players = playerDefinitions.Select(definition => new PlayerState(definition.Name, definition.IsHuman, definition.Difficulty)).ToList();
 
         if (players.Count < 3)
         {
@@ -39,6 +39,7 @@ public sealed class GameEngine
     public int CardsPerPlayer { get; private set; }
     public int RoundNumber { get; private set; }
     public int MaxCardsPerRound { get; }
+    public int Revision { get; private set; }
     public Card? TrumpCard { get; private set; }
     public string StatusMessage { get; private set; }
     public int? LastTrickWinnerIndex { get; private set; }
@@ -75,6 +76,7 @@ public sealed class GameEngine
         DealerIndex = 0;
         CardsPerPlayer = MaxCardsPerRound;
         RoundNumber = 1;
+        Revision++;
         AddEvent("New match started.");
         StartRound();
     }
@@ -90,6 +92,7 @@ public sealed class GameEngine
         {
             Phase = GamePhase.MatchComplete;
             StatusMessage = "Match complete.";
+            Revision++;
             AddEvent("Match complete.");
             return;
         }
@@ -97,6 +100,7 @@ public sealed class GameEngine
         DealerIndex = NextPlayerIndex(DealerIndex);
         CardsPerPlayer--;
         RoundNumber++;
+        Revision++;
         StartRound();
     }
 
@@ -125,12 +129,14 @@ public sealed class GameEngine
 
         CurrentPlayer.Bid = bid;
         totalBidsThisRound += bid;
+        Revision++;
         AddEvent($"{CurrentPlayer.Name} bids {bid}.");
 
         if (AllPlayersBid())
         {
             Phase = GamePhase.TrickPlaying;
             CurrentTurnIndex = LeaderIndex;
+            Revision++;
             StatusMessage = $"Bidding complete. {CurrentPlayer.Name} leads the trick.";
             AddEvent("Bidding complete.");
             return;
@@ -180,11 +186,13 @@ public sealed class GameEngine
         }
 
         currentTrick.Add(new TrickPlay(CurrentTurnIndex, card));
+        Revision++;
         AddEvent($"{CurrentPlayer.Name} plays {card.DisplayText}.");
 
         if (currentTrick.Count < players.Count)
         {
             CurrentTurnIndex = NextPlayerIndex(CurrentTurnIndex);
+            Revision++;
             var currentWinner = CurrentWinningPlayerIndex;
             StatusMessage = currentWinner.HasValue
                 ? $"Current trick leader: {players[currentWinner.Value].Name}. Waiting for {CurrentPlayer.Name}."
@@ -218,6 +226,7 @@ public sealed class GameEngine
         LastTrickWinnerIndex = winnerIndex;
         PendingTrickWinnerIndex = null;
         IsTrickResolutionPending = false;
+        Revision++;
 
         AddEvent($"{players[winnerIndex].Name} wins the trick with {winningPlay.Card.DisplayText}.");
 
@@ -225,6 +234,7 @@ public sealed class GameEngine
         {
             ApplyRoundScores();
             Phase = CardsPerPlayer == 1 ? GamePhase.MatchComplete : GamePhase.RoundComplete;
+            Revision++;
             StatusMessage = Phase == GamePhase.MatchComplete ? "Match complete." : "Round complete.";
             AddEvent(StatusMessage);
             return;
@@ -323,6 +333,15 @@ public sealed class GameEngine
         var hand = player.Hand;
         var maxCards = CardsPerPlayer;
 
+        if (player.Difficulty == BotDifficulty.Easy)
+        {
+            var allowed = GetAllowedBids(playerIndex);
+            var avg = (double)hand.Count(c => c.Rank >= 11) / Math.Max(1, hand.Count) * maxCards;
+            var easyBid = (int)Math.Round(avg, MidpointRounding.AwayFromZero);
+            easyBid = Math.Clamp(easyBid, 0, maxCards);
+            return allowed.Contains(easyBid) ? easyBid : allowed.OrderBy(v => v).First();
+        }
+
         double estimate = 0;
 
         foreach (var suit in Enum.GetValues<Suit>())
@@ -369,13 +388,18 @@ public sealed class GameEngine
         if (distance <= 1) estimate -= 0.3;
         else if (distance >= players.Count - 2) estimate += 0.3;
 
+        if (player.Difficulty == BotDifficulty.Medium)
+        {
+            estimate += random.NextDouble() * 1.2 - 0.6;
+        }
+
         var bid = (int)Math.Round(estimate, MidpointRounding.AwayFromZero);
         bid = Math.Clamp(bid, 0, maxCards);
-        var allowed = GetAllowedBids(playerIndex);
+        var allowedBids = GetAllowedBids(playerIndex);
 
-        if (!allowed.Contains(bid))
+        if (!allowedBids.Contains(bid))
         {
-            bid = allowed.OrderBy(value => Math.Abs(value - bid)).ThenBy(value => value).First();
+            bid = allowedBids.OrderBy(value => Math.Abs(value - bid)).ThenBy(value => value).First();
         }
 
         return bid;
@@ -387,6 +411,16 @@ public sealed class GameEngine
         var player = players[playerIndex];
         var needsTricks = (player.Bid ?? 0) > player.TricksWon;
         var isLeading = currentTrick.Count == 0;
+
+        if (player.Difficulty == BotDifficulty.Easy)
+        {
+            return legalCards[random.Next(legalCards.Count)];
+        }
+
+        if (player.Difficulty == BotDifficulty.Medium && random.NextDouble() < 0.2)
+        {
+            return legalCards[random.Next(legalCards.Count)];
+        }
 
         if (isLeading)
         {

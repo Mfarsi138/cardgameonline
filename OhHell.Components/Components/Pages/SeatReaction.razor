@@ -1,0 +1,12 @@
+@using OhHell.Components.Models
+
+@if (Message is { } reaction)
+{
+    <div @key="reaction.Id" class="seat-reaction" data-player-index="@reaction.PlayerIndex" role="status" aria-label="@(reaction.PlayerName + ": " + reaction.Emoji)">
+        <span aria-hidden="true">@reaction.Emoji</span>
+    </div>
+}
+
+@code {
+    [Parameter] public EmojiMessage? Message { get; set; }
+}

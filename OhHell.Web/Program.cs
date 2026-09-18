@@ -4,6 +4,8 @@ using OhHell.Web.Hubs;
 using OhHell.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+// Resolve referenced component assets for local runs without a launch profile too.
+builder.WebHost.UseStaticWebAssets();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -24,6 +26,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAntiforgery();
 
+app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddAdditionalAssemblies(typeof(OhHell.Components.App).Assembly);
